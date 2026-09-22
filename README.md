@@ -1,6 +1,7 @@
 # Pigflix
 A self-hosted streaming app for your ripped DVD/Blu-ray collection.
 Drop your video files into a folder and make them browsable and playable from your local network.
+<img width="1299" height="872" alt="image" src="https://github.com/user-attachments/assets/ab6b5042-1622-4a7b-ac94-22cbfc20aa78" />
 
 ## Architecture
 
