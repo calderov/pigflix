@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/movie.dart';
 import '../services/api_service.dart';
+import '../services/remote_control_service.dart';
 import '../services/srt_parser.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -33,6 +34,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _showBackButton = true;
   Timer? _hideBackButtonTimer;
   final FocusNode _playerFocusNode = FocusNode(debugLabel: 'video player');
+  StreamSubscription<Map<String, dynamic>>? _remoteSub;
 
   @override
   void initState() {
@@ -40,6 +42,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _requestBrowserFullscreen();
     _pollUntilReady();
     _resetBackButtonTimer();
+    _remoteSub = RemoteControlService.instance.commandStream.listen(
+      _handleRemoteCommand,
+    );
+    RemoteControlService.instance.sendScreenState(
+      'player',
+      movieTitle: widget.movie.title,
+    );
+  }
+
+  // The remote's play/pause button can't reflect true playing/paused state
+  // — the protocol has no display→remote playback-state broadcast, so it's
+  // a stateless toggle. Acceptable for v1; a natural v2 addition if wanted.
+  void _handleRemoteCommand(Map<String, dynamic> msg) {
+    if (msg['type'] != 'command') return;
+    switch (msg['action']) {
+      case 'play_pause':
+        _togglePlayPause();
+      case 'seek':
+        _seekRelative(msg['deltaSeconds'] as int? ?? 0);
+      case 'back':
+        _goBack();
+    }
+  }
+
+  void _togglePlayPause() {
+    final controller = _videoController;
+    if (controller == null) return;
+    controller.value.isPlaying ? controller.pause() : controller.play();
+  }
+
+  void _seekRelative(int deltaSeconds) {
+    final controller = _videoController;
+    if (controller == null) return;
+    final target = controller.value.position + Duration(seconds: deltaSeconds);
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (target > controller.value.duration
+              ? controller.value.duration
+              : target);
+    controller.seekTo(clamped);
   }
 
   void _onMouseActivity([PointerEvent? _]) {
@@ -182,6 +224,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _remoteSub?.cancel();
     _statusPoll?.cancel();
     _hideBackButtonTimer?.cancel();
     try {

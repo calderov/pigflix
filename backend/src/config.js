@@ -25,4 +25,6 @@ module.exports = {
   // as-is. Anything other than the literal string 'false' is treated as
   // enabled, so it's on by default.
   ENCODE_LIBRARY: (process.env.ENCODE_LIBRARY || 'true').trim().toLowerCase() !== 'false',
+  PAIRING_CODE_TTL_MS: parseInt(process.env.PAIRING_CODE_TTL_MS, 10) || 5 * 60 * 1000,
+  PAIRING_CODE_LENGTH: parseInt(process.env.PAIRING_CODE_LENGTH, 10) || 6,
 };

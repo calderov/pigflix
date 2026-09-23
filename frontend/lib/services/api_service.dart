@@ -11,6 +11,10 @@ const String backendUrl = String.fromEnvironment(
   defaultValue: 'http://localhost:4000',
 );
 
+/// The same backend, as a WebSocket URL (`http`→`ws`, `https`→`wss`), for
+/// [RemoteControlService]'s connection to the `/ws` relay endpoint.
+String get backendWsUrl => backendUrl.replaceFirst('http', 'ws');
+
 class ApiService {
   Future<List<Movie>> fetchMovies() async {
     final res = await http.get(Uri.parse('$backendUrl/api/movies'));
