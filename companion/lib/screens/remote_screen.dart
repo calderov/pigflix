@@ -18,7 +18,14 @@ class RemoteScreen extends StatelessWidget {
   }
 
   void _openSearchSheet(BuildContext context) {
-    final controller = TextEditingController();
+    // Pre-filled with whatever's currently applied — a search started from
+    // the companion app (or typed directly on Pigflix) stays active when
+    // navigating back to the grid from a movie's detail screen, so without
+    // this the sheet would look empty with no obvious way to tell there's
+    // still a filter on, let alone clear it.
+    final controller = TextEditingController(
+      text: RemoteWsService.instance.searchQuery.value,
+    );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -42,12 +49,26 @@ class RemoteScreen extends StatelessWidget {
               onChanged: RemoteWsService.instance.sendSearchQuery,
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Done'),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      controller.clear();
+                      RemoteWsService.instance.clearSearchQuery();
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('Clear'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -160,11 +181,22 @@ class RemoteScreen extends StatelessWidget {
                                     const SizedBox(height: 100),
                                     SizedBox(
                                       width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        onPressed: () =>
-                                            _openSearchSheet(context),
-                                        icon: const Icon(Icons.search),
-                                        label: const Text('Search'),
+                                      child: ValueListenableBuilder<String>(
+                                        valueListenable: RemoteWsService
+                                            .instance
+                                            .searchQuery,
+                                        builder: (context, query, _) =>
+                                            OutlinedButton.icon(
+                                              onPressed: () =>
+                                                  _openSearchSheet(context),
+                                              icon: const Icon(Icons.search),
+                                              label: Text(
+                                                query.isEmpty
+                                                    ? 'Search'
+                                                    : 'Search: $query',
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
                                       ),
                                     ),
                                   ],

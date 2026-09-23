@@ -56,7 +56,11 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     _remoteSub = RemoteControlService.instance.commandStream.listen(
       _handleRemoteCommand,
     );
-    RemoteControlService.instance.sendScreenState('grid');
+    _broadcastScreenState();
+  }
+
+  void _broadcastScreenState() {
+    RemoteControlService.instance.sendScreenState('grid', searchQuery: _query);
   }
 
   @override
@@ -81,9 +85,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   // paired remote would keep showing the detail screen's controls after the
   // user (or a remote "back" command) navigated back to the grid.
   @override
-  void didPopNext() {
-    RemoteControlService.instance.sendScreenState('grid');
-  }
+  void didPopNext() => _broadcastScreenState();
 
   // Navigator.push keeps this screen's State alive underneath whatever's
   // pushed on top of it, so its commandStream subscription would otherwise
@@ -95,6 +97,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     final movies = _filtered;
     if (msg['type'] == 'search_query') {
       setState(() => _query = msg['query'] as String? ?? '');
+      _broadcastScreenState();
       return;
     }
     if (msg['type'] != 'command' || movies.isEmpty) return;
@@ -398,7 +401,10 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                       borderSide: BorderSide.none,
                     ),
                   ),
-                  onChanged: (value) => setState(() => _query = value),
+                  onChanged: (value) {
+                    setState(() => _query = value);
+                    _broadcastScreenState();
+                  },
                 ),
               ),
             ),

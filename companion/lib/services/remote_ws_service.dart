@@ -34,6 +34,7 @@ class RemoteWsService {
   );
   final ValueNotifier<String?> currentScreen = ValueNotifier(null);
   final ValueNotifier<MovieInfo?> movieInfo = ValueNotifier(null);
+  final ValueNotifier<String> searchQuery = ValueNotifier('');
   final ValueNotifier<bool> isPlaying = ValueNotifier(true);
   final ValueNotifier<String?> pairError = ValueNotifier(null);
 
@@ -176,12 +177,14 @@ class RemoteWsService {
           genres: (msg['genres'] as List<dynamic>? ?? const []).cast<String>(),
           overview: msg['overview'] as String?,
         );
+        searchQuery.value = msg['searchQuery'] as String? ?? '';
       case 'playback_state':
         isPlaying.value = msg['isPlaying'] as bool? ?? true;
       case 'unpaired':
         _clearStoredToken();
         currentScreen.value = null;
         movieInfo.value = null;
+        searchQuery.value = '';
         status.value = ConnectionStatus.awaitingCode;
     }
   }
@@ -204,6 +207,14 @@ class RemoteWsService {
     _searchDebounce = Timer(const Duration(milliseconds: 250), () {
       _send({'type': 'search_query', 'query': query});
     });
+  }
+
+  /// Clears the search immediately, bypassing [sendSearchQuery]'s
+  /// debounce — there's no reason to wait out a typing-debounce for an
+  /// explicit "clear" action.
+  void clearSearchQuery() {
+    _searchDebounce?.cancel();
+    _send({'type': 'search_query', 'query': ''});
   }
 
   /// The display sends poster/backdrop URLs as a path relative to the

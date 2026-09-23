@@ -94,6 +94,7 @@ class RemoteControlService {
     double? rating,
     List<String>? genres,
     String? overview,
+    String? searchQuery,
   }) {
     _send({
       'type': 'screen',
@@ -106,6 +107,7 @@ class RemoteControlService {
       'rating': ?rating,
       'genres': ?genres,
       'overview': ?overview,
+      'searchQuery': ?searchQuery,
     });
   }
 

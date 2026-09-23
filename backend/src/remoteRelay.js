@@ -76,6 +76,7 @@ function handleDisplayMessage(ws, msg) {
       rating: msg.rating,
       genres: msg.genres,
       overview: msg.overview,
+      searchQuery: msg.searchQuery,
     };
     // Stale outside the player screen — cleared so a remote that (re)pairs
     // after the user's navigated away doesn't get handed a leftover
