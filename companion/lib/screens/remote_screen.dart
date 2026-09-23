@@ -157,7 +157,7 @@ class RemoteScreen extends StatelessWidget {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     DPad(onCommand: _sendCommand),
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 100),
                                     SizedBox(
                                       width: double.infinity,
                                       child: OutlinedButton.icon(
