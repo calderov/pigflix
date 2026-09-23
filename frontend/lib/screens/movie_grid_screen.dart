@@ -37,7 +37,13 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
 
   final FocusNode _gridFocusNode = FocusNode(debugLabel: 'movie grid');
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search field');
+  final TextEditingController _searchController = TextEditingController();
   final ScrollController _gridScrollController = ScrollController();
+  // Guards against the search field's onChanged firing (and re-broadcasting
+  // right back out) as a side effect of _searchController.text being set
+  // programmatically below — TextField's onChanged fires on any controller
+  // value change, not just actual keystrokes.
+  bool _syncingSearchFromRemote = false;
   int _focusedTileIndex = 0;
   int _crossAxisCount = 1;
   // Pixel distance from one row's top edge to the next row's top edge
@@ -76,6 +82,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     _gridFocusNode.removeListener(_onGridFocusChange);
     _gridFocusNode.dispose();
     _searchFocusNode.dispose();
+    _searchController.dispose();
     _gridScrollController.dispose();
     super.dispose();
   }
@@ -96,7 +103,11 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
     final movies = _filtered;
     if (msg['type'] == 'search_query') {
-      setState(() => _query = msg['query'] as String? ?? '');
+      final query = msg['query'] as String? ?? '';
+      _syncingSearchFromRemote = true;
+      _searchController.text = query;
+      _syncingSearchFromRemote = false;
+      setState(() => _query = query);
       _broadcastScreenState();
       return;
     }
@@ -392,6 +403,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                 order: const NumericFocusOrder(1),
                 child: TextField(
                   focusNode: _searchFocusNode,
+                  controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Search movies…',
                     prefixIcon: const Icon(Icons.search),
@@ -402,6 +414,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                     ),
                   ),
                   onChanged: (value) {
+                    if (_syncingSearchFromRemote) return;
                     setState(() => _query = value);
                     _broadcastScreenState();
                   },
