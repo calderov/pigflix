@@ -65,62 +65,6 @@ class RemoteScreen extends StatelessWidget {
     );
   }
 
-  /// Small poster thumbnail + title/year, shown above the playback controls
-  /// so it's clear at a glance what's playing without needing to look at
-  /// the TV — a compact version of [MovieDetailInfo] since the detail
-  /// screen's full write-up isn't needed once the movie's already playing.
-  Widget _nowPlayingHeader() {
-    return ValueListenableBuilder<MovieInfo?>(
-      valueListenable: RemoteWsService.instance.movieInfo,
-      builder: (context, info, _) {
-        if (info?.title == null) return const SizedBox.shrink();
-        final theme = Theme.of(context);
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (info!.posterUrl != null) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: SizedBox(
-                    width: 56,
-                    child: AspectRatio(
-                      aspectRatio: 2 / 3,
-                      child: Image.network(
-                        info.posterUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      info.title!,
-                      style: theme.textTheme.titleMedium,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (info.year != null)
-                      Text('${info.year}', style: theme.textTheme.bodySmall),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   /// Full-bleed backdrop behind the detail/player screens' controls,
   /// matching whatever movie is currently on screen on Pigflix — mirrors
   /// the web frontend's own detail/player screens (image + dark scrim for
@@ -228,10 +172,17 @@ class RemoteScreen extends StatelessWidget {
                               case 'player':
                                 return Column(
                                   mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    _nowPlayingHeader(),
-                                    PlaybackControls(onCommand: _sendCommand),
-                                    const SizedBox(height: 24),
+                                    MovieDetailInfo(
+                                      showGenres: false,
+                                      showOverview: false,
+                                      trailing: PlaybackControls(
+                                        onCommand: _sendCommand,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
                                     _backButton(),
                                   ],
                                 );

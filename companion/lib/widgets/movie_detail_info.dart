@@ -7,8 +7,22 @@ import '../services/remote_ws_service.dart';
 /// whichever movie is on the web frontend's detail screen — mirrors that
 /// screen's own layout (see `frontend/lib/screens/movie_detail_screen.dart`
 /// `_DetailsColumn`) so the companion app resembles it.
+///
+/// Also reused on the player screen's layout, with [showGenres] and
+/// [showOverview] off and [trailing] set to the playback controls in place
+/// of the description — same poster/title/meta presentation, since that's
+/// still accurate while the movie is playing, just without the write-up.
 class MovieDetailInfo extends StatelessWidget {
-  const MovieDetailInfo({super.key});
+  final bool showGenres;
+  final bool showOverview;
+  final Widget? trailing;
+
+  const MovieDetailInfo({
+    super.key,
+    this.showGenres = true,
+    this.showOverview = true,
+    this.trailing,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +84,7 @@ class MovieDetailInfo extends StatelessWidget {
                 ],
               ),
             ],
-            if (info.genres.isNotEmpty) ...[
+            if (showGenres && info.genres.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
                 alignment: WrapAlignment.center,
@@ -86,10 +100,11 @@ class MovieDetailInfo extends StatelessWidget {
                     .toList(),
               ),
             ],
-            if (info.overview?.isNotEmpty == true) ...[
+            if (showOverview && info.overview?.isNotEmpty == true) ...[
               const SizedBox(height: 16),
               Text(info.overview!, style: theme.textTheme.bodyMedium),
             ],
+            if (trailing != null) ...[const SizedBox(height: 20), trailing!],
           ],
         );
       },

@@ -50,6 +50,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'player',
       movieTitle: widget.movie.title,
       year: widget.movie.year,
+      runtimeMinutes: widget.movie.runtime,
+      rating: widget.movie.rating,
       posterUrl: backendRelativePath(widget.movie.posterUrl),
       backdropUrl: backendRelativePath(
         widget.movie.backdropUrl ?? widget.movie.posterUrl,
