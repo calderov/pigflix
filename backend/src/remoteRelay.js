@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { PAIRING_CODE_TTL_MS, PAIRING_CODE_LENGTH, SESSION_RESUME_TTL_MS } = require('./config');
+const { PAIRING_CODE_TTL_MINUTES, PAIRING_CODE_LENGTH, SESSION_RESUME_TTL_MINUTES } = require('./config');
 
 // All state here is in-memory and per-process: pairing codes and the
 // display/remote link are short-lived by nature (a single evening's remote
@@ -47,7 +47,7 @@ function handleRemoteDisconnect() {
   sessionResumeTimer = setTimeout(() => {
     clearSession();
     send(displaySocket, { type: 'unpaired', reason: 'remote_disconnected' });
-  }, SESSION_RESUME_TTL_MS);
+  }, SESSION_RESUME_TTL_MINUTES * 60 * 1000);
 }
 
 function unpairDisplay() {
@@ -60,7 +60,7 @@ function unpairDisplay() {
 
 function handleDisplayMessage(ws, msg) {
   if (msg.type === 'request_pairing_code') {
-    pendingCode = { code: generatePairingCode(), expiresAt: Date.now() + PAIRING_CODE_TTL_MS };
+    pendingCode = { code: generatePairingCode(), expiresAt: Date.now() + PAIRING_CODE_TTL_MINUTES * 60 * 1000 };
     send(ws, { type: 'pairing_code', code: pendingCode.code, expiresAt: pendingCode.expiresAt });
     return;
   }
