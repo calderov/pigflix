@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../models/movie_info.dart';
 import '../services/remote_ws_service.dart';
 import '../widgets/dpad.dart';
+import '../widgets/movie_detail_info.dart';
 import '../widgets/playback_controls.dart';
 
 /// The remote-control screen shown once paired. Its button layout adapts to
@@ -63,94 +65,155 @@ class RemoteScreen extends StatelessWidget {
     );
   }
 
+  /// Full-bleed backdrop shown behind the detail screen's controls, matching
+  /// whatever movie is currently on screen on Pigflix — mirrors the web
+  /// frontend's own detail screen (image + dark scrim for legibility). Only
+  /// rendered while the detail screen is showing; empty otherwise.
+  Widget _detailBackdrop() {
+    return ValueListenableBuilder<String?>(
+      valueListenable: RemoteWsService.instance.currentScreen,
+      builder: (context, screen, _) {
+        if (screen != 'detail') return const SizedBox.shrink();
+        return ValueListenableBuilder<MovieInfo?>(
+          valueListenable: RemoteWsService.instance.movieInfo,
+          builder: (context, info, _) {
+            final url = info?.backdropUrl;
+            if (url == null) return const SizedBox.shrink();
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox.shrink(),
+                ),
+                Container(color: Colors.black.withValues(alpha: 0.55)),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: ValueListenableBuilder<String?>(
-                valueListenable: RemoteWsService.instance.currentScreen,
-                builder: (context, screen, _) {
-                  switch (screen) {
-                    case 'grid':
-                      // No Back button here: the grid is the root screen on
-                      // Pigflix, so there's nowhere for "back" to go — the
-                      // display's own command handler treats it as a no-op.
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          DPad(onCommand: _sendCommand),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () => _openSearchSheet(context),
-                              icon: const Icon(Icons.search),
-                              label: const Text('Search'),
-                            ),
-                          ),
-                        ],
-                      );
-                    case 'detail':
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: () => _sendCommand('select'),
-                              icon: const Icon(Icons.play_arrow),
-                              label: const Text('Play'),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _backButton(),
-                        ],
-                      );
-                    case 'player':
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ValueListenableBuilder<String?>(
-                            valueListenable:
-                                RemoteWsService.instance.nowPlayingTitle,
-                            builder: (context, title, _) => title == null
-                                ? const SizedBox.shrink()
-                                : Padding(
-                                    padding: const EdgeInsets.only(bottom: 24),
-                                    child: Text(
-                                      'Now playing: $title',
-                                      textAlign: TextAlign.center,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _detailBackdrop(),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  // Full detail info (poster + title + overview, etc.) can
+                  // be taller than the screen on a phone, so this scrolls
+                  // when it overflows — but the shorter grid/player layouts
+                  // should still sit centered rather than pinned to the top.
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 48,
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 320),
+                        child: ValueListenableBuilder<String?>(
+                          valueListenable:
+                              RemoteWsService.instance.currentScreen,
+                          builder: (context, screen, _) {
+                            switch (screen) {
+                              case 'grid':
+                                // No Back button here: the grid is the root
+                                // screen on Pigflix, so there's nowhere for
+                                // "back" to go — the display's own command
+                                // handler treats it as a no-op.
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    DPad(onCommand: _sendCommand),
+                                    const SizedBox(height: 24),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () =>
+                                            _openSearchSheet(context),
+                                        icon: const Icon(Icons.search),
+                                        label: const Text('Search'),
+                                      ),
                                     ),
-                                  ),
-                          ),
-                          PlaybackControls(onCommand: _sendCommand),
-                          const SizedBox(height: 24),
-                          _backButton(),
-                        ],
-                      );
-                    default:
-                      return const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Connected — waiting for Pigflix…'),
-                        ],
-                      );
-                  }
-                },
-              ),
+                                  ],
+                                );
+                              case 'detail':
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    const MovieDetailInfo(),
+                                    const SizedBox(height: 20),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: () => _sendCommand('select'),
+                                        icon: const Icon(Icons.play_arrow),
+                                        label: const Text('Play'),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _backButton(),
+                                  ],
+                                );
+                              case 'player':
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ValueListenableBuilder<MovieInfo?>(
+                                      valueListenable:
+                                          RemoteWsService.instance.movieInfo,
+                                      builder: (context, info, _) =>
+                                          info?.title == null
+                                          ? const SizedBox.shrink()
+                                          : Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 24,
+                                              ),
+                                              child: Text(
+                                                'Now playing: ${info!.title}',
+                                                textAlign: TextAlign.center,
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.titleMedium,
+                                              ),
+                                            ),
+                                    ),
+                                    PlaybackControls(onCommand: _sendCommand),
+                                    const SizedBox(height: 24),
+                                    _backButton(),
+                                  ],
+                                );
+                              default:
+                                return const Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(height: 16),
+                                    Text('Connected — waiting for Pigflix…'),
+                                  ],
+                                );
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-        ),
+        ],
       ),
     );
   }

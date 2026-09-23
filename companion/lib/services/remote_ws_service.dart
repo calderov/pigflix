@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../models/movie_info.dart';
+
 enum ConnectionStatus { disconnected, connecting, awaitingCode, paired }
 
 const _sessionTokenPrefsKey = 'remote_session_token';
@@ -31,7 +33,7 @@ class RemoteWsService {
     ConnectionStatus.disconnected,
   );
   final ValueNotifier<String?> currentScreen = ValueNotifier(null);
-  final ValueNotifier<String?> nowPlayingTitle = ValueNotifier(null);
+  final ValueNotifier<MovieInfo?> movieInfo = ValueNotifier(null);
   final ValueNotifier<bool> isPlaying = ValueNotifier(true);
   final ValueNotifier<String?> pairError = ValueNotifier(null);
 
@@ -128,7 +130,7 @@ class RemoteWsService {
   void _handleDisconnect() {
     _channel = null;
     currentScreen.value = null;
-    nowPlayingTitle.value = null;
+    movieInfo.value = null;
     status.value = ConnectionStatus.disconnected;
     _scheduleReconnect();
   }
@@ -164,13 +166,22 @@ class RemoteWsService {
         status.value = ConnectionStatus.awaitingCode;
       case 'screen':
         currentScreen.value = msg['screen'] as String?;
-        nowPlayingTitle.value = msg['movieTitle'] as String?;
+        movieInfo.value = MovieInfo(
+          title: msg['movieTitle'] as String?,
+          backdropUrl: _resolveImageUrl(msg['backdropUrl'] as String?),
+          posterUrl: _resolveImageUrl(msg['posterUrl'] as String?),
+          year: msg['year'] as int?,
+          runtimeMinutes: msg['runtimeMinutes'] as int?,
+          rating: (msg['rating'] as num?)?.toDouble(),
+          genres: (msg['genres'] as List<dynamic>? ?? const []).cast<String>(),
+          overview: msg['overview'] as String?,
+        );
       case 'playback_state':
         isPlaying.value = msg['isPlaying'] as bool? ?? true;
       case 'unpaired':
         _clearStoredToken();
         currentScreen.value = null;
-        nowPlayingTitle.value = null;
+        movieInfo.value = null;
         status.value = ConnectionStatus.awaitingCode;
     }
   }
@@ -193,6 +204,20 @@ class RemoteWsService {
     _searchDebounce = Timer(const Duration(milliseconds: 250), () {
       _send({'type': 'search_query', 'query': query});
     });
+  }
+
+  /// The display sends poster/backdrop URLs as a path relative to the
+  /// backend (e.g. `/api/movies/x/backdrop`), not a full URL — its own
+  /// notion of a "full URL" is baked in at that build's compile time and
+  /// may not mean anything on this phone (e.g. `localhost`). Resolving
+  /// against [_backendWsUrl] instead — the host this app is actually
+  /// connected to right now — is always correct.
+  String? _resolveImageUrl(String? path) {
+    if (path == null) return null;
+    final wsUrl = _backendWsUrl;
+    if (wsUrl == null) return null;
+    final httpBase = wsUrl.replaceFirst('ws', 'http');
+    return '$httpBase$path';
   }
 
   Future<String?> _loadStoredToken() async {

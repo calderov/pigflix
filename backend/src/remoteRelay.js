@@ -66,7 +66,17 @@ function handleDisplayMessage(ws, msg) {
     return;
   }
   if (msg.type === 'screen') {
-    lastScreenState = { screen: msg.screen, movieTitle: msg.movieTitle };
+    lastScreenState = {
+      screen: msg.screen,
+      movieTitle: msg.movieTitle,
+      backdropUrl: msg.backdropUrl,
+      posterUrl: msg.posterUrl,
+      year: msg.year,
+      runtimeMinutes: msg.runtimeMinutes,
+      rating: msg.rating,
+      genres: msg.genres,
+      overview: msg.overview,
+    };
     // Stale outside the player screen — cleared so a remote that (re)pairs
     // after the user's navigated away doesn't get handed a leftover
     // play/pause state for a screen that has no playback controls anyway.

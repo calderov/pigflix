@@ -84,8 +84,29 @@ class RemoteControlService {
     _send({'type': 'request_pairing_code'});
   }
 
-  void sendScreenState(String screen, {String? movieTitle}) {
-    _send({'type': 'screen', 'screen': screen, 'movieTitle': ?movieTitle});
+  void sendScreenState(
+    String screen, {
+    String? movieTitle,
+    String? backdropUrl,
+    String? posterUrl,
+    int? year,
+    int? runtimeMinutes,
+    double? rating,
+    List<String>? genres,
+    String? overview,
+  }) {
+    _send({
+      'type': 'screen',
+      'screen': screen,
+      'movieTitle': ?movieTitle,
+      'backdropUrl': ?backdropUrl,
+      'posterUrl': ?posterUrl,
+      'year': ?year,
+      'runtimeMinutes': ?runtimeMinutes,
+      'rating': ?rating,
+      'genres': ?genres,
+      'overview': ?overview,
+    });
   }
 
   void sendPlaybackState(bool isPlaying) {
