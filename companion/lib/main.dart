@@ -17,7 +17,7 @@ class PigflixRemoteApp extends StatelessWidget {
       title: 'Pigflix Remote',
       theme: ThemeData(
         brightness: Brightness.dark,
-        colorSchemeSeed: Colors.redAccent,
+        colorSchemeSeed: Colors.blueAccent,
         useMaterial3: true,
       ),
       home: const _RootScreen(),
