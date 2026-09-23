@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/remote_ws_service.dart';
+import '../widgets/pigflix_logo.dart';
 
 const _hostPrefsKey = 'backend_host';
 
@@ -65,52 +66,64 @@ class _PairingScreenState extends State<PairingScreen> {
     }
 
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: ValueListenableBuilder<ConnectionStatus>(
-                valueListenable: RemoteWsService.instance.status,
-                builder: (context, status, _) {
-                  switch (status) {
-                    case ConnectionStatus.disconnected:
-                      return _HostForm(
-                        controller: _hostController,
-                        onConnect: () {
-                          final host = _hostController.text.trim();
-                          if (host.isNotEmpty) _connect(host);
-                        },
-                      );
-                    case ConnectionStatus.connecting:
-                      return const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Connecting…'),
-                        ],
-                      );
-                    case ConnectionStatus.awaitingCode:
-                      return _CodeForm(
-                        controller: _codeController,
-                        onSubmit: () {
-                          final code = _codeController.text.trim();
-                          if (code.length == 6) {
-                            RemoteWsService.instance.submitPairingCode(code);
-                          }
-                        },
-                        onChangeServer: _changeServer,
-                      );
-                    case ConnectionStatus.paired:
-                      return const SizedBox.shrink();
-                  }
-                },
+      body: Stack(
+        children: [
+          const SafeArea(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Align(alignment: Alignment.topLeft, child: PigflixLogo()),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: ValueListenableBuilder<ConnectionStatus>(
+                    valueListenable: RemoteWsService.instance.status,
+                    builder: (context, status, _) {
+                      switch (status) {
+                        case ConnectionStatus.disconnected:
+                          return _HostForm(
+                            controller: _hostController,
+                            onConnect: () {
+                              final host = _hostController.text.trim();
+                              if (host.isNotEmpty) _connect(host);
+                            },
+                          );
+                        case ConnectionStatus.connecting:
+                          return const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text('Connecting…'),
+                            ],
+                          );
+                        case ConnectionStatus.awaitingCode:
+                          return _CodeForm(
+                            controller: _codeController,
+                            onSubmit: () {
+                              final code = _codeController.text.trim();
+                              if (code.length == 6) {
+                                RemoteWsService.instance.submitPairingCode(
+                                  code,
+                                );
+                              }
+                            },
+                            onChangeServer: _changeServer,
+                          );
+                        case ConnectionStatus.paired:
+                          return const SizedBox.shrink();
+                      }
+                    },
+                  ),
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

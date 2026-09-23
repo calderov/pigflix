@@ -4,6 +4,7 @@ import '../models/movie_info.dart';
 import '../services/remote_ws_service.dart';
 import '../widgets/dpad.dart';
 import '../widgets/movie_detail_info.dart';
+import '../widgets/pigflix_logo.dart';
 import '../widgets/playback_controls.dart';
 
 /// The remote-control screen shown once paired. Its button layout adapts to
@@ -100,6 +101,24 @@ class RemoteScreen extends StatelessWidget {
     );
   }
 
+  /// Top-left Pigflix wordmark, shown only on the grid (d-pad) layout — the
+  /// detail/player screens are already dominated by the movie's backdrop
+  /// art, and adding it there would just compete with that.
+  Widget _gridLogo() {
+    return ValueListenableBuilder<String?>(
+      valueListenable: RemoteWsService.instance.currentScreen,
+      builder: (context, screen, _) {
+        if (screen != 'grid') return const SizedBox.shrink();
+        return const SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Align(alignment: Alignment.topLeft, child: PigflixLogo()),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -107,6 +126,7 @@ class RemoteScreen extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           _movieBackdrop(),
+          _gridLogo(),
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
