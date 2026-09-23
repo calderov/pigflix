@@ -9,6 +9,7 @@ let displaySocket = null;
 let remoteSocket = null;
 let pendingCode = null; // { code, expiresAt }
 let lastScreenState = null; // { screen, movieTitle }
+let lastPlaybackState = null; // { isPlaying }
 
 // Lets a remote reconnect (e.g. after a phone's screen-off suspends its
 // socket) without walking through the pairing-code flow again. Set once a
@@ -66,7 +67,16 @@ function handleDisplayMessage(ws, msg) {
   }
   if (msg.type === 'screen') {
     lastScreenState = { screen: msg.screen, movieTitle: msg.movieTitle };
+    // Stale outside the player screen — cleared so a remote that (re)pairs
+    // after the user's navigated away doesn't get handed a leftover
+    // play/pause state for a screen that has no playback controls anyway.
+    if (msg.screen !== 'player') lastPlaybackState = null;
     send(remoteSocket, { type: 'screen', ...lastScreenState });
+    return;
+  }
+  if (msg.type === 'playback_state') {
+    lastPlaybackState = { isPlaying: msg.isPlaying };
+    send(remoteSocket, { type: 'playback_state', ...lastPlaybackState });
   }
 }
 
@@ -82,6 +92,9 @@ function handleRemoteMessage(ws, msg) {
     send(ws, { type: 'resume_success' });
     if (lastScreenState) {
       send(ws, { type: 'screen', ...lastScreenState });
+    }
+    if (lastPlaybackState) {
+      send(ws, { type: 'playback_state', ...lastPlaybackState });
     }
     return;
   }
@@ -113,6 +126,9 @@ function handleRemoteMessage(ws, msg) {
     send(ws, { type: 'pair_success', sessionToken });
     if (lastScreenState) {
       send(ws, { type: 'screen', ...lastScreenState });
+    }
+    if (lastPlaybackState) {
+      send(ws, { type: 'playback_state', ...lastPlaybackState });
     }
     send(displaySocket, { type: 'pair_success' });
     return;

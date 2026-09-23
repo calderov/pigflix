@@ -35,6 +35,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _hideBackButtonTimer;
   final FocusNode _playerFocusNode = FocusNode(debugLabel: 'video player');
   StreamSubscription<Map<String, dynamic>>? _remoteSub;
+  bool? _lastBroadcastIsPlaying;
 
   @override
   void initState() {
@@ -51,9 +52,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  // The remote's play/pause button can't reflect true playing/paused state
-  // — the protocol has no display→remote playback-state broadcast, so it's
-  // a stateless toggle. Acceptable for v1; a natural v2 addition if wanted.
   void _handleRemoteCommand(Map<String, dynamic> msg) {
     if (msg['type'] != 'command') return;
     switch (msg['action']) {
@@ -70,6 +68,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final controller = _videoController;
     if (controller == null) return;
     controller.value.isPlaying ? controller.pause() : controller.play();
+  }
+
+  // VideoPlayerController notifies listeners on every value change,
+  // including frequent position ticks while playing — so this only
+  // broadcasts when isPlaying itself actually flips, not on every tick.
+  // Covers every source of a play/pause change uniformly (native Chewie
+  // button taps, a remote-triggered toggle, autoplay starting, buffering
+  // pausing playback, the video ending), since they all funnel through the
+  // same VideoPlayerController.
+  void _onVideoValueChanged() {
+    final controller = _videoController;
+    if (controller == null) return;
+    final isPlaying = controller.value.isPlaying;
+    if (isPlaying == _lastBroadcastIsPlaying) return;
+    _lastBroadcastIsPlaying = isPlaying;
+    RemoteControlService.instance.sendPlaybackState(isPlaying);
   }
 
   void _seekRelative(int deltaSeconds) {
@@ -161,6 +175,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final url = Uri.parse(widget.movie.streamUrl);
     final controller = VideoPlayerController.networkUrl(url);
     _videoController = controller;
+    controller.addListener(_onVideoValueChanged);
     try {
       await controller.initialize();
       if (!mounted) return;
@@ -232,6 +247,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         html.document.exitFullscreen();
       }
     } catch (_) {}
+    _videoController?.removeListener(_onVideoValueChanged);
     _chewieController?.dispose();
     _videoController?.dispose();
     _playerFocusNode.dispose();

@@ -32,6 +32,7 @@ class RemoteWsService {
   );
   final ValueNotifier<String?> currentScreen = ValueNotifier(null);
   final ValueNotifier<String?> nowPlayingTitle = ValueNotifier(null);
+  final ValueNotifier<bool> isPlaying = ValueNotifier(true);
   final ValueNotifier<String?> pairError = ValueNotifier(null);
 
   /// Set when [connect] fails or times out, so the pairing screen can show
@@ -164,6 +165,8 @@ class RemoteWsService {
       case 'screen':
         currentScreen.value = msg['screen'] as String?;
         nowPlayingTitle.value = msg['movieTitle'] as String?;
+      case 'playback_state':
+        isPlaying.value = msg['isPlaying'] as bool? ?? true;
       case 'unpaired':
         _clearStoredToken();
         currentScreen.value = null;

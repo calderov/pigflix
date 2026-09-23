@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../services/remote_ws_service.dart';
+
 /// Play/pause + seek ±10s controls for the player screen's remote layout.
-/// The play/pause button can't reflect true playing/paused state (the
-/// protocol has no display→remote playback-state broadcast in v1), so it's
-/// a stateless toggle — see the matching note in the frontend's
-/// player_screen.dart.
+/// The play/pause button's icon reflects the frontend's actual playback
+/// state (see `RemoteWsService.isPlaying`, updated from `playback_state`
+/// messages), not just a fixed icon — it shows a pause icon while the
+/// movie is playing and a play icon while paused.
 class PlaybackControls extends StatelessWidget {
   final void Function(String action, {int? deltaSeconds}) onCommand;
 
@@ -27,7 +29,11 @@ class PlaybackControls extends StatelessWidget {
           child: FilledButton(
             style: FilledButton.styleFrom(shape: const CircleBorder()),
             onPressed: () => onCommand('play_pause'),
-            child: const Icon(Icons.play_arrow, size: 40),
+            child: ValueListenableBuilder<bool>(
+              valueListenable: RemoteWsService.instance.isPlaying,
+              builder: (context, isPlaying, _) =>
+                  Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 40),
+            ),
           ),
         ),
         const SizedBox(width: 16),

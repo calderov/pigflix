@@ -77,6 +77,9 @@ class RemoteScreen extends StatelessWidget {
                 builder: (context, screen, _) {
                   switch (screen) {
                     case 'grid':
+                      // No Back button here: the grid is the root screen on
+                      // Pigflix, so there's nowhere for "back" to go — the
+                      // display's own command handler treats it as a no-op.
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -90,8 +93,6 @@ class RemoteScreen extends StatelessWidget {
                               label: const Text('Search'),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          _backButton(),
                         ],
                       );
                     case 'detail':
@@ -103,7 +104,7 @@ class RemoteScreen extends StatelessWidget {
                             child: FilledButton.icon(
                               onPressed: () => _sendCommand('select'),
                               icon: const Icon(Icons.play_arrow),
-                              label: const Text('Select'),
+                              label: const Text('Play'),
                             ),
                           ),
                           const SizedBox(height: 12),

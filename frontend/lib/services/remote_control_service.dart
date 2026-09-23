@@ -87,4 +87,8 @@ class RemoteControlService {
   void sendScreenState(String screen, {String? movieTitle}) {
     _send({'type': 'screen', 'screen': screen, 'movieTitle': ?movieTitle});
   }
+
+  void sendPlaybackState(bool isPlaying) {
+    _send({'type': 'playback_state', 'isPlaying': isPlaying});
+  }
 }
