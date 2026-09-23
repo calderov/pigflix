@@ -65,15 +65,74 @@ class RemoteScreen extends StatelessWidget {
     );
   }
 
-  /// Full-bleed backdrop shown behind the detail screen's controls, matching
-  /// whatever movie is currently on screen on Pigflix — mirrors the web
-  /// frontend's own detail screen (image + dark scrim for legibility). Only
-  /// rendered while the detail screen is showing; empty otherwise.
-  Widget _detailBackdrop() {
+  /// Small poster thumbnail + title/year, shown above the playback controls
+  /// so it's clear at a glance what's playing without needing to look at
+  /// the TV — a compact version of [MovieDetailInfo] since the detail
+  /// screen's full write-up isn't needed once the movie's already playing.
+  Widget _nowPlayingHeader() {
+    return ValueListenableBuilder<MovieInfo?>(
+      valueListenable: RemoteWsService.instance.movieInfo,
+      builder: (context, info, _) {
+        if (info?.title == null) return const SizedBox.shrink();
+        final theme = Theme.of(context);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (info!.posterUrl != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 56,
+                    child: AspectRatio(
+                      aspectRatio: 2 / 3,
+                      child: Image.network(
+                        info.posterUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      info.title!,
+                      style: theme.textTheme.titleMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (info.year != null)
+                      Text('${info.year}', style: theme.textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Full-bleed backdrop behind the detail/player screens' controls,
+  /// matching whatever movie is currently on screen on Pigflix — mirrors
+  /// the web frontend's own detail/player screens (image + dark scrim for
+  /// legibility). Empty on the grid screen, which has no single movie to
+  /// show a backdrop for.
+  Widget _movieBackdrop() {
     return ValueListenableBuilder<String?>(
       valueListenable: RemoteWsService.instance.currentScreen,
       builder: (context, screen, _) {
-        if (screen != 'detail') return const SizedBox.shrink();
+        if (screen != 'detail' && screen != 'player') {
+          return const SizedBox.shrink();
+        }
         return ValueListenableBuilder<MovieInfo?>(
           valueListenable: RemoteWsService.instance.movieInfo,
           builder: (context, info, _) {
@@ -103,7 +162,7 @@ class RemoteScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          _detailBackdrop(),
+          _movieBackdrop(),
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -170,25 +229,7 @@ class RemoteScreen extends StatelessWidget {
                                 return Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    ValueListenableBuilder<MovieInfo?>(
-                                      valueListenable:
-                                          RemoteWsService.instance.movieInfo,
-                                      builder: (context, info, _) =>
-                                          info?.title == null
-                                          ? const SizedBox.shrink()
-                                          : Padding(
-                                              padding: const EdgeInsets.only(
-                                                bottom: 24,
-                                              ),
-                                              child: Text(
-                                                'Now playing: ${info!.title}',
-                                                textAlign: TextAlign.center,
-                                                style: Theme.of(
-                                                  context,
-                                                ).textTheme.titleMedium,
-                                              ),
-                                            ),
-                                    ),
+                                    _nowPlayingHeader(),
                                     PlaybackControls(onCommand: _sendCommand),
                                     const SizedBox(height: 24),
                                     _backButton(),

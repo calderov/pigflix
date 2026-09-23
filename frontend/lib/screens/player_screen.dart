@@ -49,6 +49,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     RemoteControlService.instance.sendScreenState(
       'player',
       movieTitle: widget.movie.title,
+      year: widget.movie.year,
+      posterUrl: backendRelativePath(widget.movie.posterUrl),
+      backdropUrl: backendRelativePath(
+        widget.movie.backdropUrl ?? widget.movie.posterUrl,
+      ),
     );
   }
 

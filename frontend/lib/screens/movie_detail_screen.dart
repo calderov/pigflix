@@ -58,30 +58,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
     RemoteControlService.instance.sendScreenState(
       'detail',
       movieTitle: _movie.title,
-      backdropUrl: _backendRelativePath(_movie.backdropUrl ?? _movie.posterUrl),
-      posterUrl: _backendRelativePath(_movie.posterUrl),
+      backdropUrl: backendRelativePath(_movie.backdropUrl ?? _movie.posterUrl),
+      posterUrl: backendRelativePath(_movie.posterUrl),
       year: _movie.year,
       runtimeMinutes: _movie.runtime,
       rating: _movie.rating,
       genres: _movie.genres,
       overview: _movie.overview,
     );
-  }
-
-  /// [Movie]'s poster/backdrop URLs are pre-resolved to an absolute URL
-  /// against *this build's* [backendUrl] (see `models/movie.dart`), which
-  /// may not be reachable from the paired phone at all (e.g. it defaults to
-  /// `http://localhost:4000` unless the frontend was built with
-  /// `--dart-define=BACKEND_URL=...`, and "localhost" means something
-  /// different on the phone than it does here). Sending the relative path
-  /// instead lets the companion app resolve it against the host *it's*
-  /// actually connected to, which is always correct regardless of how this
-  /// build was configured.
-  String? _backendRelativePath(String? resolvedUrl) {
-    if (resolvedUrl == null) return null;
-    return resolvedUrl.startsWith(backendUrl)
-        ? resolvedUrl.substring(backendUrl.length)
-        : resolvedUrl;
   }
 
   // Play is this screen's sole default action (autofocus by default), so
