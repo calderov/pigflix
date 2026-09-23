@@ -9,7 +9,12 @@ class DPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget button(IconData icon, String action, {double size = 64, Offset offset = const Offset(0, 0)}) {
+    Widget button(
+      IconData icon,
+      String action, {
+      double size = 64,
+      Offset offset = const Offset(0, 0),
+    }) {
       return SizedBox(
         width: size,
         height: size,
@@ -32,11 +37,19 @@ class DPad extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            button(Icons.keyboard_arrow_left, 'move_left', offset: Offset(-6, 0)),
+            button(
+              Icons.keyboard_arrow_left,
+              'move_left',
+              offset: Offset(-6, 0),
+            ),
             const SizedBox(width: 8),
             button(Icons.circle, 'select', size: 72, offset: Offset(-2, 0)),
             const SizedBox(width: 8),
-            button(Icons.keyboard_arrow_right, 'move_right', offset: Offset(-3, 0)),
+            button(
+              Icons.keyboard_arrow_right,
+              'move_right',
+              offset: Offset(-3, 0),
+            ),
           ],
         ),
         const SizedBox(height: 8),

@@ -31,8 +31,13 @@ class PlaybackControls extends StatelessWidget {
             onPressed: () => onCommand('play_pause'),
             child: ValueListenableBuilder<bool>(
               valueListenable: RemoteWsService.instance.isPlaying,
-              builder: (context, isPlaying, _) =>
-                  Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 40),
+              builder: (context, isPlaying, _) => Transform.translate(
+                offset: const Offset(-5, 0),
+                child: Icon(
+                  isPlaying ? Icons.pause : Icons.play_arrow,
+                  size: 40,
+                ),
+              ),
             ),
           ),
         ),
