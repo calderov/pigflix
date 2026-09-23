@@ -9,6 +9,7 @@ Map<String, String> _pairErrorMessages = const {
   'invalid_code': 'Incorrect code',
   'expired': 'Code expired, generate a new one on Pigflix',
   'already_paired': 'A remote is already connected',
+  'session_ended': 'Previous session ended — enter a new code',
 };
 
 class PairingScreen extends StatefulWidget {

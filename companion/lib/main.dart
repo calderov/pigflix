@@ -27,8 +27,38 @@ class PigflixRemoteApp extends StatelessWidget {
 
 /// Single navigation point switching between the pairing flow and the
 /// remote-control screen, driven by [RemoteWsService.instance.status].
-class _RootScreen extends StatelessWidget {
+///
+/// Also watches app lifecycle: Android tends to suspend a backgrounded
+/// app's socket as soon as the screen turns off, so the connection is
+/// usually already dead by the time the screen turns back on. Reconnecting
+/// right on resume (rather than waiting for whatever retry delay happens
+/// to be pending) makes that feel instant.
+class _RootScreen extends StatefulWidget {
   const _RootScreen();
+
+  @override
+  State<_RootScreen> createState() => _RootScreenState();
+}
+
+class _RootScreenState extends State<_RootScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      RemoteWsService.instance.reconnectNow();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

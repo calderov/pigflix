@@ -27,4 +27,9 @@ module.exports = {
   ENCODE_LIBRARY: (process.env.ENCODE_LIBRARY || 'true').trim().toLowerCase() !== 'false',
   PAIRING_CODE_TTL_MS: parseInt(process.env.PAIRING_CODE_TTL_MS, 10) || 5 * 60 * 1000,
   PAIRING_CODE_LENGTH: parseInt(process.env.PAIRING_CODE_LENGTH, 10) || 6,
+  // How long a paired remote's session stays resumable after its connection
+  // drops (e.g. the phone's screen turning off suspends its socket) before
+  // the pairing is torn down and a fresh pairing code is required. Default:
+  // 10 minutes — long enough to survive a phone screen timeout mid-movie.
+  SESSION_RESUME_TTL_MS: parseInt(process.env.SESSION_RESUME_TTL_MS, 10) || 10 * 60 * 1000,
 };

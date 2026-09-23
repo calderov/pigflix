@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { PAIRING_CODE_TTL_MS, PAIRING_CODE_LENGTH } = require('./config');
+const { PAIRING_CODE_TTL_MS, PAIRING_CODE_LENGTH, SESSION_RESUME_TTL_MS } = require('./config');
 
 // All state here is in-memory and per-process: pairing codes and the
 // display/remote link are short-lived by nature (a single evening's remote
@@ -10,10 +10,18 @@ let remoteSocket = null;
 let pendingCode = null; // { code, expiresAt }
 let lastScreenState = null; // { screen, movieTitle }
 
+// Lets a remote reconnect (e.g. after a phone's screen-off suspends its
+// socket) without walking through the pairing-code flow again. Set once a
+// remote successfully pairs; stays valid — even while `remoteSocket` is
+// briefly null between the old connection dropping and a new one resuming
+// it — until either it's used to resume, `sessionResumeTimer` fires, or the
+// display itself disconnects.
+let sessionToken = null;
+let sessionResumeTimer = null;
+
 function generatePairingCode() {
   const max = 10 ** PAIRING_CODE_LENGTH;
-  const code = crypto.randomInt(0, max).toString().padStart(PAIRING_CODE_LENGTH, '0');
-  return code;
+  return crypto.randomInt(0, max).toString().padStart(PAIRING_CODE_LENGTH, '0');
 }
 
 function send(ws, message) {
@@ -22,15 +30,32 @@ function send(ws, message) {
   }
 }
 
-function unpairRemote(reason) {
-  send(displaySocket, { type: 'unpaired', reason });
-  remoteSocket = null;
+function clearSession() {
+  clearTimeout(sessionResumeTimer);
+  sessionResumeTimer = null;
+  sessionToken = null;
 }
 
-function unpairDisplay(reason) {
-  send(remoteSocket, { type: 'unpaired', reason });
+// Called when the remote's socket closes. Doesn't tear down the session
+// immediately — just stops routing to the dead socket and starts a grace
+// window during which a `resume_session` with the matching token can
+// silently reattach a new socket. Only once that window elapses without a
+// resume does the pairing actually end (and the display get told).
+function handleRemoteDisconnect() {
+  remoteSocket = null;
+  clearTimeout(sessionResumeTimer);
+  sessionResumeTimer = setTimeout(() => {
+    clearSession();
+    send(displaySocket, { type: 'unpaired', reason: 'remote_disconnected' });
+  }, SESSION_RESUME_TTL_MS);
+}
+
+function unpairDisplay() {
+  send(remoteSocket, { type: 'unpaired', reason: 'display_disconnected' });
   displaySocket = null;
   lastScreenState = null;
+  remoteSocket = null;
+  clearSession();
 }
 
 function handleDisplayMessage(ws, msg) {
@@ -46,6 +71,21 @@ function handleDisplayMessage(ws, msg) {
 }
 
 function handleRemoteMessage(ws, msg) {
+  if (msg.type === 'resume_session') {
+    if (!sessionToken || msg.token !== sessionToken || !displaySocket) {
+      send(ws, { type: 'resume_failure', reason: 'session_ended' });
+      return;
+    }
+    clearTimeout(sessionResumeTimer);
+    sessionResumeTimer = null;
+    remoteSocket = ws;
+    send(ws, { type: 'resume_success' });
+    if (lastScreenState) {
+      send(ws, { type: 'screen', ...lastScreenState });
+    }
+    return;
+  }
+
   if (msg.type === 'pair_attempt') {
     if (ws !== remoteSocket && remoteSocket) {
       send(ws, { type: 'pair_failure', reason: 'already_paired' });
@@ -65,9 +105,12 @@ function handleRemoteMessage(ws, msg) {
       return;
     }
 
+    clearTimeout(sessionResumeTimer);
+    sessionResumeTimer = null;
     remoteSocket = ws;
     pendingCode = null;
-    send(ws, { type: 'pair_success' });
+    sessionToken = crypto.randomBytes(16).toString('hex');
+    send(ws, { type: 'pair_success', sessionToken });
     if (lastScreenState) {
       send(ws, { type: 'screen', ...lastScreenState });
     }
@@ -97,13 +140,13 @@ function attachRemoteRelay(wss) {
       displaySocket = ws;
       ws.on('close', () => {
         if (ws === displaySocket) {
-          unpairDisplay('display_disconnected');
+          unpairDisplay();
         }
       });
     } else if (role === 'remote') {
       ws.on('close', () => {
         if (ws === remoteSocket) {
-          unpairRemote('remote_disconnected');
+          handleRemoteDisconnect();
         }
       });
     } else {
