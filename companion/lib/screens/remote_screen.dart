@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/movie_info.dart';
 import '../services/remote_ws_service.dart';
+import '../utils/haptics.dart';
 import '../widgets/dpad.dart';
 import '../widgets/movie_detail_info.dart';
 import '../widgets/pigflix_logo.dart';
@@ -54,6 +55,7 @@ class RemoteScreen extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () {
+                      tapHaptic();
                       controller.clear();
                       RemoteWsService.instance.clearSearchQuery();
                       Navigator.of(context).pop();
@@ -64,7 +66,10 @@ class RemoteScreen extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      tapHaptic();
+                      Navigator.of(context).pop();
+                    },
                     child: const Text('Done'),
                   ),
                 ),
@@ -78,6 +83,7 @@ class RemoteScreen extends StatelessWidget {
 
   void _openSubtitlesSheet(BuildContext context, MovieInfo info) {
     void select(String? lang) {
+      tapHaptic();
       RemoteWsService.instance.sendCommand(
         'select_subtitle',
         lang: lang ?? '__off__',
@@ -118,7 +124,10 @@ class RemoteScreen extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: () => _sendCommand('back'),
+        onPressed: () {
+          tapHaptic();
+          _sendCommand('back');
+        },
         icon: const Icon(Icons.arrow_back),
         label: const Text('Back'),
       ),
@@ -225,8 +234,10 @@ class RemoteScreen extends StatelessWidget {
                                             .searchQuery,
                                         builder: (context, query, _) =>
                                             OutlinedButton.icon(
-                                              onPressed: () =>
-                                                  _openSearchSheet(context),
+                                              onPressed: () {
+                                                tapHaptic();
+                                                _openSearchSheet(context);
+                                              },
                                               icon: const Icon(Icons.search),
                                               label: Text(
                                                 query.isEmpty
@@ -250,7 +261,10 @@ class RemoteScreen extends StatelessWidget {
                                     SizedBox(
                                       width: double.infinity,
                                       child: FilledButton.icon(
-                                        onPressed: () => _sendCommand('select'),
+                                        onPressed: () {
+                                          tapHaptic();
+                                          _sendCommand('select');
+                                        },
                                         icon: const Icon(Icons.play_arrow),
                                         label: const Text('Play'),
                                       ),
@@ -288,11 +302,13 @@ class RemoteScreen extends StatelessWidget {
                                                     SizedBox(
                                                       width: double.infinity,
                                                       child: OutlinedButton.icon(
-                                                        onPressed: () =>
-                                                            _openSubtitlesSheet(
-                                                              context,
-                                                              info!,
-                                                            ),
+                                                        onPressed: () {
+                                                          tapHaptic();
+                                                          _openSubtitlesSheet(
+                                                            context,
+                                                            info!,
+                                                          );
+                                                        },
                                                         icon: const Icon(
                                                           Icons.subtitles,
                                                         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/remote_ws_service.dart';
+import '../utils/haptics.dart';
 import '../widgets/pigflix_logo.dart';
 
 const _hostPrefsKey = 'backend_host';
@@ -49,6 +50,7 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 
   void _changeServer() {
+    tapHaptic();
     RemoteWsService.instance.disconnect();
   }
 
@@ -88,6 +90,7 @@ class _PairingScreenState extends State<PairingScreen> {
                           return _HostForm(
                             controller: _hostController,
                             onConnect: () {
+                              tapHaptic();
                               final host = _hostController.text.trim();
                               if (host.isNotEmpty) _connect(host);
                             },
@@ -105,6 +108,7 @@ class _PairingScreenState extends State<PairingScreen> {
                           return _CodeForm(
                             controller: _codeController,
                             onSubmit: () {
+                              tapHaptic();
                               final code = _codeController.text.trim();
                               if (code.length == 6) {
                                 RemoteWsService.instance.submitPairingCode(
