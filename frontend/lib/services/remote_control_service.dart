@@ -95,6 +95,8 @@ class RemoteControlService {
     List<String>? genres,
     String? overview,
     String? searchQuery,
+    List<Map<String, String?>>? subtitles,
+    String? activeSubtitleLang,
   }) {
     _send({
       'type': 'screen',
@@ -108,6 +110,8 @@ class RemoteControlService {
       'genres': ?genres,
       'overview': ?overview,
       'searchQuery': ?searchQuery,
+      'subtitles': ?subtitles,
+      'activeSubtitleLang': ?activeSubtitleLang,
     });
   }
 

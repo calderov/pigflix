@@ -1,3 +1,16 @@
+/// One selectable subtitle track, as broadcast by the player screen.
+/// [lang] is a stable wire identifier — never the raw language code alone,
+/// since an untagged track's code is `null` on the frontend; see
+/// `_subtitleKey` in `frontend/lib/screens/player_screen.dart` for the
+/// exact encoding (`'__default__'` for untagged, real tracks use their own
+/// code). Echo it back verbatim in a `select_subtitle` command.
+class SubtitleOption {
+  final String lang;
+  final String label;
+
+  const SubtitleOption({required this.lang, required this.label});
+}
+
 /// Metadata about whichever movie the web frontend is currently showing on
 /// its detail (or player) screen, so the companion app's detail layout can
 /// mirror it. Fields the current screen doesn't send (e.g. the player
@@ -11,6 +24,8 @@ class MovieInfo {
   final double? rating;
   final List<String> genres;
   final String? overview;
+  final List<SubtitleOption> subtitles;
+  final String? activeSubtitleLang;
 
   const MovieInfo({
     this.title,
@@ -21,6 +36,8 @@ class MovieInfo {
     this.rating,
     this.genres = const [],
     this.overview,
+    this.subtitles = const [],
+    this.activeSubtitleLang,
   });
 
   /// e.g. "1h 43m", "45m", "2h" — matches the frontend's own formatting

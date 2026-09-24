@@ -46,6 +46,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _remoteSub = RemoteControlService.instance.commandStream.listen(
       _handleRemoteCommand,
     );
+    _broadcastScreenState();
+  }
+
+  void _broadcastScreenState() {
     RemoteControlService.instance.sendScreenState(
       'player',
       movieTitle: widget.movie.title,
@@ -56,6 +60,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       backdropUrl: backendRelativePath(
         widget.movie.backdropUrl ?? widget.movie.posterUrl,
       ),
+      subtitles: widget.movie.subtitles
+          .map(
+            (t) => {
+              'lang': _subtitleKey(t.lang),
+              'label': _languageLabel(t.lang),
+            },
+          )
+          .toList(),
+      activeSubtitleLang: _activeSubtitleTrack == null
+          ? '__off__'
+          : _subtitleKey(_activeSubtitleTrack!.lang),
     );
   }
 
@@ -68,6 +83,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _seekRelative(msg['deltaSeconds'] as int? ?? 0);
       case 'back':
         _goBack();
+      case 'select_subtitle':
+        _handleRemoteSelectSubtitle(msg['lang'] as String?);
+    }
+  }
+
+  void _handleRemoteSelectSubtitle(String? key) {
+    if (key == null || key == '__off__') {
+      _selectSubtitleTrack(null);
+      return;
+    }
+    for (final track in widget.movie.subtitles) {
+      if (_subtitleKey(track.lang) == key) {
+        _selectSubtitleTrack(track);
+        return;
+      }
     }
   }
 
@@ -225,6 +255,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _cues = null;
         _activeSubtitleTrack = null;
       });
+      _broadcastScreenState();
       return;
     }
 
@@ -236,6 +267,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _cues = cues;
         _activeSubtitleTrack = track;
       });
+      _broadcastScreenState();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -514,6 +546,13 @@ String _languageLabel(String? code) {
   };
   return names[code.toLowerCase()] ?? code.toUpperCase();
 }
+
+/// Stable non-null wire identifier for a subtitle track, for the companion
+/// app's "select this track" commands and the `screen` broadcast's
+/// `activeSubtitleLang` field. Mirrors [_SubtitleTrackButton._offSentinel]'s
+/// reasoning: an untagged track's [SubtitleTrack.lang] is `null`, which
+/// would otherwise collide with using `null` to mean "no track selected".
+String _subtitleKey(String? lang) => lang ?? '__default__';
 
 /// Renders the current subtitle cue for [videoController]'s playback
 /// position, re-evaluated on every position update. Positioned above

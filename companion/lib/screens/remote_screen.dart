@@ -76,6 +76,44 @@ class RemoteScreen extends StatelessWidget {
     );
   }
 
+  void _openSubtitlesSheet(BuildContext context, MovieInfo info) {
+    void select(String? lang) {
+      RemoteWsService.instance.sendCommand(
+        'select_subtitle',
+        lang: lang ?? '__off__',
+      );
+      Navigator.of(context).pop();
+    }
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Off'),
+              trailing:
+                  info.activeSubtitleLang == null ||
+                      info.activeSubtitleLang == '__off__'
+                  ? const Icon(Icons.check)
+                  : null,
+              onTap: () => select(null),
+            ),
+            for (final option in info.subtitles)
+              ListTile(
+                title: Text(option.label),
+                trailing: info.activeSubtitleLang == option.lang
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => select(option.lang),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _backButton() {
     return SizedBox(
       width: double.infinity,
@@ -230,9 +268,44 @@ class RemoteScreen extends StatelessWidget {
                                     MovieDetailInfo(
                                       showGenres: false,
                                       showOverview: false,
-                                      trailing: PlaybackControls(
-                                        onCommand: _sendCommand,
-                                      ),
+                                      trailing:
+                                          ValueListenableBuilder<MovieInfo?>(
+                                            valueListenable: RemoteWsService
+                                                .instance
+                                                .movieInfo,
+                                            builder: (context, info, _) {
+                                              final hasSubtitles =
+                                                  info?.subtitles.isNotEmpty ??
+                                                  false;
+                                              return Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  PlaybackControls(
+                                                    onCommand: _sendCommand,
+                                                  ),
+                                                  if (hasSubtitles) ...[
+                                                    const SizedBox(height: 16),
+                                                    SizedBox(
+                                                      width: double.infinity,
+                                                      child: OutlinedButton.icon(
+                                                        onPressed: () =>
+                                                            _openSubtitlesSheet(
+                                                              context,
+                                                              info!,
+                                                            ),
+                                                        icon: const Icon(
+                                                          Icons.subtitles,
+                                                        ),
+                                                        label: const Text(
+                                                          'Subtitles',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              );
+                                            },
+                                          ),
                                     ),
                                     const SizedBox(height: 20),
                                     _backButton(),

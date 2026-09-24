@@ -176,6 +176,15 @@ class RemoteWsService {
           rating: (msg['rating'] as num?)?.toDouble(),
           genres: (msg['genres'] as List<dynamic>? ?? const []).cast<String>(),
           overview: msg['overview'] as String?,
+          subtitles: (msg['subtitles'] as List<dynamic>? ?? const [])
+              .map(
+                (t) => SubtitleOption(
+                  lang: t['lang'] as String,
+                  label: t['label'] as String,
+                ),
+              )
+              .toList(),
+          activeSubtitleLang: msg['activeSubtitleLang'] as String?,
         );
         searchQuery.value = msg['searchQuery'] as String? ?? '';
       case 'playback_state':
@@ -198,8 +207,13 @@ class RemoteWsService {
     _send({'type': 'pair_attempt', 'code': code});
   }
 
-  void sendCommand(String action, {int? deltaSeconds}) {
-    _send({'type': 'command', 'action': action, 'deltaSeconds': ?deltaSeconds});
+  void sendCommand(String action, {int? deltaSeconds, String? lang}) {
+    _send({
+      'type': 'command',
+      'action': action,
+      'deltaSeconds': ?deltaSeconds,
+      'lang': ?lang,
+    });
   }
 
   void sendSearchQuery(String query) {

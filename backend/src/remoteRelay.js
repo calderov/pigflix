@@ -77,6 +77,8 @@ function handleDisplayMessage(ws, msg) {
       genres: msg.genres,
       overview: msg.overview,
       searchQuery: msg.searchQuery,
+      subtitles: msg.subtitles,
+      activeSubtitleLang: msg.activeSubtitleLang,
     };
     // Stale outside the player screen — cleared so a remote that (re)pairs
     // after the user's navigated away doesn't get handed a leftover
@@ -148,7 +150,7 @@ function handleRemoteMessage(ws, msg) {
   if (ws !== remoteSocket) return; // not (yet, or no longer) the paired remote
 
   if (msg.type === 'command') {
-    send(displaySocket, { type: 'command', action: msg.action, deltaSeconds: msg.deltaSeconds });
+    send(displaySocket, { type: 'command', action: msg.action, deltaSeconds: msg.deltaSeconds, lang: msg.lang });
   } else if (msg.type === 'search_query') {
     send(displaySocket, { type: 'search_query', query: msg.query });
   }
