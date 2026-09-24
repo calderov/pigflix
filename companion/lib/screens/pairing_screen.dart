@@ -152,7 +152,7 @@ class _HostForm extends StatelessWidget {
         const Icon(Icons.settings_remote, size: 48),
         const SizedBox(height: 16),
         Text(
-          'Pigflix Remote',
+          'Pigflix Link',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 24),
