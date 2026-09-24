@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ import 'package:flutter/services.dart';
 import '../models/movie.dart';
 import '../services/admin_session.dart';
 import '../services/api_service.dart';
+import '../services/remote_control_service.dart';
+import '../services/route_observer.dart';
 import '../widgets/poster_placeholder.dart';
 import 'movie_detail_screen.dart';
 
@@ -26,7 +29,7 @@ class MovieGridScreen extends StatefulWidget {
   State<MovieGridScreen> createState() => _MovieGridScreenState();
 }
 
-class _MovieGridScreenState extends State<MovieGridScreen> {
+class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   final ApiService _api = ApiService();
   late Future<List<Movie>> _moviesFuture;
   List<Movie> _allMovies = [];
@@ -34,7 +37,13 @@ class _MovieGridScreenState extends State<MovieGridScreen> {
 
   final FocusNode _gridFocusNode = FocusNode(debugLabel: 'movie grid');
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search field');
+  final TextEditingController _searchController = TextEditingController();
   final ScrollController _gridScrollController = ScrollController();
+  // Guards against the search field's onChanged firing (and re-broadcasting
+  // right back out) as a side effect of _searchController.text being set
+  // programmatically below — TextField's onChanged fires on any controller
+  // value change, not just actual keystrokes.
+  bool _syncingSearchFromRemote = false;
   int _focusedTileIndex = 0;
   int _crossAxisCount = 1;
   // Pixel distance from one row's top edge to the next row's top edge
@@ -43,20 +52,78 @@ class _MovieGridScreenState extends State<MovieGridScreen> {
   // the focused tile, however far off-screen it is.
   double _rowStride = 0;
 
+  StreamSubscription<Map<String, dynamic>>? _remoteSub;
+
   @override
   void initState() {
     super.initState();
     _moviesFuture = _load();
     _gridFocusNode.addListener(_onGridFocusChange);
+    _remoteSub = RemoteControlService.instance.commandStream.listen(
+      _handleRemoteCommand,
+    );
+    _broadcastScreenState();
+  }
+
+  void _broadcastScreenState() {
+    RemoteControlService.instance.sendScreenState('grid', searchQuery: _query);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
   }
 
   @override
   void dispose() {
+    routeObserver.unsubscribe(this);
+    _remoteSub?.cancel();
     _gridFocusNode.removeListener(_onGridFocusChange);
     _gridFocusNode.dispose();
     _searchFocusNode.dispose();
+    _searchController.dispose();
     _gridScrollController.dispose();
     super.dispose();
+  }
+
+  // Popping back here from the detail screen doesn't re-run initState (this
+  // is the same, already-existing screen instance), so without this the
+  // paired remote would keep showing the detail screen's controls after the
+  // user (or a remote "back" command) navigated back to the grid.
+  @override
+  void didPopNext() => _broadcastScreenState();
+
+  // Navigator.push keeps this screen's State alive underneath whatever's
+  // pushed on top of it, so its commandStream subscription would otherwise
+  // keep reacting to remote commands even while the detail/player screen is
+  // the one actually visible (e.g. a remote "select" sent from the detail
+  // screen would also open whatever tile happens to be grid-focused here).
+  void _handleRemoteCommand(Map<String, dynamic> msg) {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    final movies = _filtered;
+    if (msg['type'] == 'search_query') {
+      final query = msg['query'] as String? ?? '';
+      _syncingSearchFromRemote = true;
+      _searchController.text = query;
+      _syncingSearchFromRemote = false;
+      setState(() => _query = query);
+      _broadcastScreenState();
+      return;
+    }
+    if (msg['type'] != 'command' || movies.isEmpty) return;
+    switch (msg['action']) {
+      case 'move_up':
+        _moveFocusVertical(-1, movies.length);
+      case 'move_down':
+        _moveFocusVertical(1, movies.length);
+      case 'move_left':
+        _moveFocusHorizontal(-1, movies.length);
+      case 'move_right':
+        _moveFocusHorizontal(1, movies.length);
+      case 'select':
+        _openMovie(movies[_clampFocusIndex(_focusedTileIndex, movies.length)]);
+    }
   }
 
   void _onGridFocusChange() => setState(() {});
@@ -242,6 +309,11 @@ class _MovieGridScreenState extends State<MovieGridScreen> {
     }
   }
 
+  void _openRemotePairingDialog() {
+    RemoteControlService.instance.requestPairingCode();
+    showDialog(context: context, builder: (_) => const _RemotePairingDialog());
+  }
+
   Future<void> _toggleAdmin() async {
     if (AdminSession.isAdmin.value) {
       AdminSession.isAdmin.value = false;
@@ -290,6 +362,14 @@ class _MovieGridScreenState extends State<MovieGridScreen> {
                   children: [
                     FocusTraversalOrder(
                       order: const NumericFocusOrder(3),
+                      child: IconButton(
+                        icon: const Icon(Icons.settings_remote),
+                        tooltip: 'Pair remote control',
+                        onPressed: _openRemotePairingDialog,
+                      ),
+                    ),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(4),
                       child: ValueListenableBuilder<bool>(
                         valueListenable: AdminSession.isAdmin,
                         builder: (context, isAdmin, _) => IconButton(
@@ -302,7 +382,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> {
                       ),
                     ),
                     FocusTraversalOrder(
-                      order: const NumericFocusOrder(4),
+                      order: const NumericFocusOrder(5),
                       child: IconButton(
                         icon: const Icon(Icons.refresh),
                         tooltip: 'Refresh library',
@@ -323,6 +403,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> {
                 order: const NumericFocusOrder(1),
                 child: TextField(
                   focusNode: _searchFocusNode,
+                  controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Search movies…',
                     prefixIcon: const Icon(Icons.search),
@@ -332,7 +413,11 @@ class _MovieGridScreenState extends State<MovieGridScreen> {
                       borderSide: BorderSide.none,
                     ),
                   ),
-                  onChanged: (value) => setState(() => _query = value),
+                  onChanged: (value) {
+                    if (_syncingSearchFromRemote) return;
+                    setState(() => _query = value);
+                    _broadcastScreenState();
+                  },
                 ),
               ),
             ),
@@ -606,6 +691,100 @@ class _AdminPasswordDialogState extends State<_AdminPasswordDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Text('Unlock'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Displays the backend-generated pairing code for linking the "Pigflix
+/// Remote" companion app, and auto-closes as soon as
+/// [RemoteControlService.isPaired] flips true. Unlike [_AdminPasswordDialog]
+/// there's nothing to submit here — the phone does the submitting — so this
+/// widget only ever displays state pushed in over the socket.
+class _RemotePairingDialog extends StatefulWidget {
+  const _RemotePairingDialog();
+
+  @override
+  State<_RemotePairingDialog> createState() => _RemotePairingDialogState();
+}
+
+class _RemotePairingDialogState extends State<_RemotePairingDialog> {
+  @override
+  void initState() {
+    super.initState();
+    RemoteControlService.instance.isPaired.addListener(_onPairedChange);
+  }
+
+  @override
+  void dispose() {
+    RemoteControlService.instance.isPaired.removeListener(_onPairedChange);
+    super.dispose();
+  }
+
+  void _onPairedChange() {
+    if (RemoteControlService.instance.isPaired.value && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Pair remote control'),
+      content: SizedBox(
+        width: 280,
+        child: ValueListenableBuilder<String?>(
+          valueListenable: RemoteControlService.instance.pairingCode,
+          builder: (context, code, _) {
+            if (code == null) {
+              return const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Generating code…'),
+                ],
+              );
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  code,
+                  style: const TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 6,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Enter this on the Pigflix Remote app',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 12),
+                    Text('Waiting for phone…'),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
         ),
       ],
     );

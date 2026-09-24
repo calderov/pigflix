@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/movie.dart';
 import '../services/api_service.dart';
+import '../services/remote_control_service.dart';
 import '../services/srt_parser.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -33,6 +34,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _showBackButton = true;
   Timer? _hideBackButtonTimer;
   final FocusNode _playerFocusNode = FocusNode(debugLabel: 'video player');
+  StreamSubscription<Map<String, dynamic>>? _remoteSub;
+  bool? _lastBroadcastIsPlaying;
 
   @override
   void initState() {
@@ -40,6 +43,96 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _requestBrowserFullscreen();
     _pollUntilReady();
     _resetBackButtonTimer();
+    _remoteSub = RemoteControlService.instance.commandStream.listen(
+      _handleRemoteCommand,
+    );
+    _broadcastScreenState();
+  }
+
+  void _broadcastScreenState() {
+    RemoteControlService.instance.sendScreenState(
+      'player',
+      movieTitle: widget.movie.title,
+      year: widget.movie.year,
+      runtimeMinutes: widget.movie.runtime,
+      rating: widget.movie.rating,
+      posterUrl: backendRelativePath(widget.movie.posterUrl),
+      backdropUrl: backendRelativePath(
+        widget.movie.backdropUrl ?? widget.movie.posterUrl,
+      ),
+      subtitles: widget.movie.subtitles
+          .map(
+            (t) => {
+              'lang': _subtitleKey(t.lang),
+              'label': _languageLabel(t.lang),
+            },
+          )
+          .toList(),
+      activeSubtitleLang: _activeSubtitleTrack == null
+          ? '__off__'
+          : _subtitleKey(_activeSubtitleTrack!.lang),
+    );
+  }
+
+  void _handleRemoteCommand(Map<String, dynamic> msg) {
+    if (msg['type'] != 'command') return;
+    switch (msg['action']) {
+      case 'play_pause':
+        _togglePlayPause();
+      case 'seek':
+        _seekRelative(msg['deltaSeconds'] as int? ?? 0);
+      case 'back':
+        _goBack();
+      case 'select_subtitle':
+        _handleRemoteSelectSubtitle(msg['lang'] as String?);
+    }
+  }
+
+  void _handleRemoteSelectSubtitle(String? key) {
+    if (key == null || key == '__off__') {
+      _selectSubtitleTrack(null);
+      return;
+    }
+    for (final track in widget.movie.subtitles) {
+      if (_subtitleKey(track.lang) == key) {
+        _selectSubtitleTrack(track);
+        return;
+      }
+    }
+  }
+
+  void _togglePlayPause() {
+    final controller = _videoController;
+    if (controller == null) return;
+    controller.value.isPlaying ? controller.pause() : controller.play();
+  }
+
+  // VideoPlayerController notifies listeners on every value change,
+  // including frequent position ticks while playing — so this only
+  // broadcasts when isPlaying itself actually flips, not on every tick.
+  // Covers every source of a play/pause change uniformly (native Chewie
+  // button taps, a remote-triggered toggle, autoplay starting, buffering
+  // pausing playback, the video ending), since they all funnel through the
+  // same VideoPlayerController.
+  void _onVideoValueChanged() {
+    final controller = _videoController;
+    if (controller == null) return;
+    final isPlaying = controller.value.isPlaying;
+    if (isPlaying == _lastBroadcastIsPlaying) return;
+    _lastBroadcastIsPlaying = isPlaying;
+    RemoteControlService.instance.sendPlaybackState(isPlaying);
+  }
+
+  void _seekRelative(int deltaSeconds) {
+    final controller = _videoController;
+    if (controller == null) return;
+    final target = controller.value.position + Duration(seconds: deltaSeconds);
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (target > controller.value.duration
+              ? controller.value.duration
+              : target);
+    controller.seekTo(clamped);
   }
 
   void _onMouseActivity([PointerEvent? _]) {
@@ -119,6 +212,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final url = Uri.parse(widget.movie.streamUrl);
     final controller = VideoPlayerController.networkUrl(url);
     _videoController = controller;
+    controller.addListener(_onVideoValueChanged);
     try {
       await controller.initialize();
       if (!mounted) return;
@@ -161,6 +255,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _cues = null;
         _activeSubtitleTrack = null;
       });
+      _broadcastScreenState();
       return;
     }
 
@@ -172,6 +267,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _cues = cues;
         _activeSubtitleTrack = track;
       });
+      _broadcastScreenState();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -182,6 +278,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _remoteSub?.cancel();
     _statusPoll?.cancel();
     _hideBackButtonTimer?.cancel();
     try {
@@ -189,6 +286,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         html.document.exitFullscreen();
       }
     } catch (_) {}
+    _videoController?.removeListener(_onVideoValueChanged);
     _chewieController?.dispose();
     _videoController?.dispose();
     _playerFocusNode.dispose();
@@ -448,6 +546,13 @@ String _languageLabel(String? code) {
   };
   return names[code.toLowerCase()] ?? code.toUpperCase();
 }
+
+/// Stable non-null wire identifier for a subtitle track, for the companion
+/// app's "select this track" commands and the `screen` broadcast's
+/// `activeSubtitleLang` field. Mirrors [_SubtitleTrackButton._offSentinel]'s
+/// reasoning: an untagged track's [SubtitleTrack.lang] is `null`, which
+/// would otherwise collide with using `null` to mean "no track selected".
+String _subtitleKey(String? lang) => lang ?? '__default__';
 
 /// Renders the current subtitle cue for [videoController]'s playback
 /// position, re-evaluated on every position update. Positioned above

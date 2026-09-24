@@ -11,6 +11,23 @@ const String backendUrl = String.fromEnvironment(
   defaultValue: 'http://localhost:4000',
 );
 
+/// The same backend, as a WebSocket URL (`http`→`ws`, `https`→`wss`), for
+/// [RemoteControlService]'s connection to the `/ws` relay endpoint.
+String get backendWsUrl => backendUrl.replaceFirst('http', 'ws');
+
+/// Strips this build's [backendUrl] back off one of [Movie]'s pre-resolved
+/// poster/backdrop URLs, for sending over [RemoteControlService] instead —
+/// this build's notion of a "full URL" (e.g. `http://localhost:4000`,
+/// unless built with `--dart-define=BACKEND_URL=...`) may not mean
+/// anything on a paired phone, so the companion app resolves the bare path
+/// itself against whatever host *it's* actually connected to.
+String? backendRelativePath(String? resolvedUrl) {
+  if (resolvedUrl == null) return null;
+  return resolvedUrl.startsWith(backendUrl)
+      ? resolvedUrl.substring(backendUrl.length)
+      : resolvedUrl;
+}
+
 class ApiService {
   Future<List<Movie>> fetchMovies() async {
     final res = await http.get(Uri.parse('$backendUrl/api/movies'));

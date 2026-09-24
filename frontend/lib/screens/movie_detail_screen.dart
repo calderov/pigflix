@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/movie.dart';
 import '../services/admin_session.dart';
 import '../services/api_service.dart';
+import '../services/remote_control_service.dart';
+import '../services/route_observer.dart';
 import '../widgets/poster_placeholder.dart';
 import 'player_screen.dart';
 
@@ -16,9 +20,73 @@ class MovieDetailScreen extends StatefulWidget {
   State<MovieDetailScreen> createState() => _MovieDetailScreenState();
 }
 
-class _MovieDetailScreenState extends State<MovieDetailScreen> {
+class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
   final ApiService _api = ApiService();
   late Movie _movie = widget.movie;
+  StreamSubscription<Map<String, dynamic>>? _remoteSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _remoteSub = RemoteControlService.instance.commandStream.listen(
+      _handleRemoteCommand,
+    );
+    _broadcastScreenState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    _remoteSub?.cancel();
+    super.dispose();
+  }
+
+  // Popping back here from the player screen doesn't re-run initState (this
+  // is the same, already-existing screen instance), so without this the
+  // paired remote would keep showing the player's controls after the user
+  // (or a remote "back" command) navigated back to this screen.
+  @override
+  void didPopNext() => _broadcastScreenState();
+
+  void _broadcastScreenState() {
+    RemoteControlService.instance.sendScreenState(
+      'detail',
+      movieTitle: _movie.title,
+      backdropUrl: backendRelativePath(_movie.backdropUrl ?? _movie.posterUrl),
+      posterUrl: backendRelativePath(_movie.posterUrl),
+      year: _movie.year,
+      runtimeMinutes: _movie.runtime,
+      rating: _movie.rating,
+      genres: _movie.genres,
+      overview: _movie.overview,
+    );
+  }
+
+  // Play is this screen's sole default action (autofocus by default), so
+  // remote "select" always activates it — no need to track which of
+  // Back/Play currently holds focus.
+  //
+  // The `isCurrent` guard matters here: this screen's State stays alive
+  // (and its commandStream subscription with it) while the player screen
+  // is pushed on top of it, so without the guard a remote "back" sent from
+  // the player would also pop *this* screen, skipping straight to the grid
+  // instead of stopping on the detail screen.
+  void _handleRemoteCommand(Map<String, dynamic> msg) {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    if (msg['type'] != 'command') return;
+    switch (msg['action']) {
+      case 'select':
+        _play();
+      case 'back':
+        Navigator.of(context).maybePop();
+    }
+  }
 
   void _play() {
     Navigator.of(

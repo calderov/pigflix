@@ -7,9 +7,9 @@ for (const dir of [MOVIES_DIR, METADATA_DIR, TRANSCODED_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-const app = createServer();
+const { server } = createServer();
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`pigflix backend listening on http://localhost:${PORT}`);
   scanAndRegister().catch((err) => console.error('[scan] Failed:', err));
 });
