@@ -110,7 +110,12 @@ class _PairingScreenState extends State<PairingScreen> {
                             onSubmit: () {
                               tapHaptic();
                               final code = _codeController.text.trim();
-                              if (code.length == 6) {
+                              // The actual expected length is a
+                              // backend-configured value
+                              // (PAIRING_CODE_LENGTH), not something this
+                              // app should assume — an incorrect code is
+                              // already surfaced via pair_failure below.
+                              if (code.isNotEmpty) {
                                 RemoteWsService.instance.submitPairingCode(
                                   code,
                                 );
@@ -215,14 +220,10 @@ class _CodeForm extends StatelessWidget {
         TextField(
           controller: controller,
           autofocus: true,
-          maxLength: 6,
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 32, letterSpacing: 8),
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            counterText: '',
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
           onSubmitted: (_) => onSubmit(),
         ),
         ValueListenableBuilder<String?>(
