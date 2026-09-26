@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/remote_ws_service.dart';
+import '../utils/haptics.dart';
 import '../widgets/pigflix_logo.dart';
 
 const _hostPrefsKey = 'backend_host';
@@ -49,6 +50,7 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 
   void _changeServer() {
+    tapHaptic();
     RemoteWsService.instance.disconnect();
   }
 
@@ -88,6 +90,7 @@ class _PairingScreenState extends State<PairingScreen> {
                           return _HostForm(
                             controller: _hostController,
                             onConnect: () {
+                              tapHaptic();
                               final host = _hostController.text.trim();
                               if (host.isNotEmpty) _connect(host);
                             },
@@ -105,8 +108,14 @@ class _PairingScreenState extends State<PairingScreen> {
                           return _CodeForm(
                             controller: _codeController,
                             onSubmit: () {
+                              tapHaptic();
                               final code = _codeController.text.trim();
-                              if (code.length == 6) {
+                              // The actual expected length is a
+                              // backend-configured value
+                              // (PAIRING_CODE_LENGTH), not something this
+                              // app should assume — an incorrect code is
+                              // already surfaced via pair_failure below.
+                              if (code.isNotEmpty) {
                                 RemoteWsService.instance.submitPairingCode(
                                   code,
                                 );
@@ -143,7 +152,7 @@ class _HostForm extends StatelessWidget {
         const Icon(Icons.settings_remote, size: 48),
         const SizedBox(height: 16),
         Text(
-          'Pigflix Remote',
+          'Pigflix Link',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 24),
@@ -211,14 +220,10 @@ class _CodeForm extends StatelessWidget {
         TextField(
           controller: controller,
           autofocus: true,
-          maxLength: 6,
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 32, letterSpacing: 8),
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            counterText: '',
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
           onSubmitted: (_) => onSubmit(),
         ),
         ValueListenableBuilder<String?>(

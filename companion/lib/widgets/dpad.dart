@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/haptics.dart';
+
 /// A 5-button directional pad (up/down/left/right around a center Select),
 /// used on the grid screen's remote layout.
 class DPad extends StatelessWidget {
@@ -20,7 +22,10 @@ class DPad extends StatelessWidget {
         height: size,
         child: FilledButton(
           style: FilledButton.styleFrom(shape: const CircleBorder()),
-          onPressed: () => onCommand(action),
+          onPressed: () {
+            tapHaptic();
+            onCommand(action);
+          },
           child: Transform.translate(
             offset: offset,
             child: Icon(icon, size: size * 0.4),

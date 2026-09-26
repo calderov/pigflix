@@ -14,7 +14,7 @@ class PigflixRemoteApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pigflix Remote',
+      title: 'Pigflix Link',
       theme: ThemeData(
         brightness: Brightness.dark,
         colorSchemeSeed: Colors.blueAccent,
