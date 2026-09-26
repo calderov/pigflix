@@ -35,7 +35,8 @@ function pruneMissingMovies(filesOnDisk) {
 }
 
 async function scanAndRegister() {
-  fs.mkdirSync(MOVIES_DIR, { recursive: true });
+  // MOVIES_DIR is guaranteed to already exist by this point.
+  // index.js validates it at startup before this ever runs.
   const files = walk(MOVIES_DIR);
 
   pruneMissingMovies(files);

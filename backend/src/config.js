@@ -6,6 +6,11 @@ const ROOT = path.join(__dirname, '..');
 
 const adminPassword = process.env.ADMIN_PASSWORD || '';
 
+// MOVIES_FOLDER is required — there is no bundled default movies folder.
+// Absolute, or resolved against ROOT (not the process's CWD) if relative,
+// so behavior doesn't depend on where `node index.js` happens to be
+// started from. Left `null` if unset; index.js fails startup loudly rather
+// than falling back to some implicit location.
 module.exports = {
   PORT: parseInt(process.env.PORT, 10) || 4000,
   TMDB_API_KEY: process.env.TMDB_API_KEY || '',
@@ -15,7 +20,9 @@ module.exports = {
   ADMIN_PASSWORD_HASH: adminPassword
     ? crypto.createHash('sha256').update(adminPassword, 'utf8').digest('hex')
     : '',
-  MOVIES_DIR: path.join(ROOT, 'movies'),
+  MOVIES_DIR: process.env.MOVIES_FOLDER
+    ? path.resolve(ROOT, process.env.MOVIES_FOLDER)
+    : null,
   METADATA_DIR: path.join(ROOT, 'metadata'),
   TRANSCODED_DIR: path.join(ROOT, 'transcoded'),
   DATA_DIR: path.join(ROOT, 'data'),

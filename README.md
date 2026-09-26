@@ -17,7 +17,6 @@ Two independent projects in this repo:
 ```
 pigflix/
 ├── backend/
-│   ├── movies/       # put your ripped video files here (flat or in subfolders)
 │   ├── metadata/     # per-movie info.json + poster.jpg + backdrop.jpg (generated)
 │   ├── transcoded/   # cached playback-ready .mp4 per movie (generated but optional)
 │   ├── data/         # SQLite database tracking your movies
@@ -32,13 +31,17 @@ pigflix/
     └── build/web/
 ```
 
+Your movie files aren't part of this tree — they live wherever
+`MOVIES_FOLDER` (set in `backend/.env`) points, anywhere on your
+filesystem. Supported movie extensions: `.mp4 .mkv .avi .mov .m4v .wmv`.
+
 ## How it works
 
-1. On boot, the backend walks `backend/movies/` and compares it against the
+1. On boot, the backend walks `MOVIES_FOLDER` and compares it against the
    movies in the SQLite database.
 2. For each new movie, the title and year are parsed from its filename and then searched against TMDb to fetch its metadata, cover art and background image.
-3. Files removed from `backend/movies/` are pruned from the DB, and its metadata metadata and transcoded files removed automatically.
-4. If ENCODE_LIBRARY is set to true in the .env file the app will ensure a browser-playable files exists in `backend/transcoded/`, if not it will transcode the movies in `backend/movies/` to H.264/ACC and save them on `backend/transcoded`.
+3. Files removed from the movies folder are pruned from the DB, and its metadata metadata and transcoded files removed automatically.
+4. If ENCODE_LIBRARY is set to true in the .env file the app will ensure a browser-playable files exists in `backend/transcoded/`, if not it will transcode the movies to H.264/ACC and save them on `backend/transcoded`.
 
 ## Setup on a new machine
 
@@ -56,13 +59,11 @@ pigflix/
 cd backend
 npm install
 cp .env.example .env
-# edit .env and set TMDB_API_KEY=<your key>
-# also set ADMIN_PASSWORD=<a password> to enable admin mode in the frontend
-# (see "Admin mode" below) — leave it blank to disable admin mode entirely
 ```
-
-Put your ripped video files into `backend/movies/` (subfolders are fine).
-Supported extensions: `.mp4 .mkv .avi .mov .m4v .wmv`.
+Edit .env and set:
+- `MOVIES_FOLDER=<path to your movie files>` to let Pigflix know where are your movies are stored (movies in subfolders are fine).
+- `TMDB_API_KEY=<your key>` to fetch movie posters, backdrops and metadata.
+- `ADMIN_PASSWORD=<a password>` to enable admin mode in the frontend or leave blank to disable admin mode entirely.
 
 ### 2. Frontend
 
@@ -88,8 +89,7 @@ cd backend
 npm start
 ```
 
-The backend scans `movies/`, fetches metadata for anything new, and serves
-both the API and the built frontend on port 4000. Open
+The backend scans the movies folder, fetches metadata for anything new, and serves both the API and the built frontend on port 4000. Open
 `http://<LAN-IP>:4000` from any browser on your network (or
 `http://localhost:4000` on the server itself).
 
@@ -119,11 +119,24 @@ To also remove the source video files themselves (irreversible — only do
 this if you actually want to delete your ripped movies), additionally:
 
 ```bash
-rm -rf movies/*
+rm -rf "$MOVIES_FOLDER"/*
 ```
 
 Restart the backend (`npm start`) afterwards; it will treat any files still
-in `movies/` as new and re-register them from scratch.
+in `MOVIES_FOLDER` as new and re-register them from scratch.
+
+### Moving your movies folder later
+
+Want to relocate your movie files to a different drive/path? Movies are
+tracked in the database by their path *relative to* `MOVIES_FOLDER`, so no
+database changes are needed — just:
+
+1. Stop the backend.
+2. Move the *contents* of the old `MOVIES_FOLDER` to the new location,
+   keeping the same subfolder structure.
+3. Update `MOVIES_FOLDER` in `.env` to the new location.
+4. Restart the backend — your existing library, metadata, and transcoded
+   cache all keep working unchanged.
 
 ### Admin mode
 The lock button next to "refresh library" on the grid screen prompts for
