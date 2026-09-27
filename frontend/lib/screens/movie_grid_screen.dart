@@ -927,6 +927,7 @@ class _GenreFilterDialogState extends State<_GenreFilterDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       title: const Text('Filter by genre'),
       content: SizedBox(
         width: 320,
