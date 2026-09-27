@@ -946,51 +946,63 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
       title: const Text('Pair remote control'),
       content: SizedBox(
         width: 280,
-        child: ValueListenableBuilder<String?>(
-          valueListenable: RemoteControlService.instance.pairingCode,
-          builder: (context, code, _) {
-            if (code == null) {
-              return const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Generating code…'),
-                ],
-              );
-            }
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  code,
-                  style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 6,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Enter this on the Pigflix Remote app',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                const Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Server: ${lanServerAddress ?? backendHostPort}',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            ValueListenableBuilder<String?>(
+              valueListenable: RemoteControlService.instance.pairingCode,
+              builder: (context, code, _) {
+                if (code == null) {
+                  return const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Generating code…'),
+                    ],
+                  );
+                }
+                return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                    Text(
+                      code,
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 6,
+                      ),
                     ),
-                    SizedBox(width: 12),
-                    Text('Waiting for phone…'),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Enter this on the Pigflix Remote app',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Waiting for phone…'),
+                      ],
+                    ),
                   ],
-                ),
-              ],
-            );
-          },
+                );
+              },
+            ),
+          ],
         ),
       ),
       actions: [
