@@ -280,6 +280,21 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     if (!_gridScrollController.hasClients || _rowStride <= 0) return;
 
     final position = _gridScrollController.position;
+
+    // The first row is special-cased to always land at scroll offset 0
+    // (rather than just scrolling the tile itself into view, which would
+    // stop as soon as its top edge cleared the viewport, potentially
+    // leaving the grid's top padding scrolled just out of sight).
+    if (index < _crossAxisCount) {
+      if (position.pixels == 0) return;
+      await _gridScrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+
     final tileHeight = _rowStride - _gridMainAxisSpacing;
     final targetTop = _gridPadding + (index ~/ _crossAxisCount) * _rowStride;
     final targetBottom = targetTop + tileHeight;
