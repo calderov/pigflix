@@ -38,6 +38,9 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
 
   final FocusNode _gridFocusNode = FocusNode(debugLabel: 'movie grid');
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search field');
+  final FocusNode _filterButtonFocusNode = FocusNode(
+    debugLabel: 'genre filter button',
+  );
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _gridScrollController = ScrollController();
   // Guards against the search field's onChanged firing (and re-broadcasting
@@ -83,6 +86,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     _gridFocusNode.removeListener(_onGridFocusChange);
     _gridFocusNode.dispose();
     _searchFocusNode.dispose();
+    _filterButtonFocusNode.dispose();
     _searchController.dispose();
     _gridScrollController.dispose();
     super.dispose();
@@ -304,6 +308,27 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     return KeyEventResult.handled;
   }
 
+  /// Arrow-key navigation away from the genre filter button: Up/Left go
+  /// back to the search field beside it, Down/Right go to the grid.
+  KeyEventResult _handleFilterButtonKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowUp:
+      case LogicalKeyboardKey.arrowLeft:
+        _searchFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowDown:
+      case LogicalKeyboardKey.arrowRight:
+        _gridFocusNode.requestFocus();
+        if (_filtered.isNotEmpty) _setFocusedIndex(0);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
   KeyEventResult _handleGridKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -475,15 +500,21 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                   const SizedBox(width: 8),
                   FocusTraversalOrder(
                     order: const NumericFocusOrder(2),
-                    child: IconButton(
-                      icon: const Icon(Icons.filter_list),
-                      tooltip: 'Filter by genre',
-                      style: IconButton.styleFrom(
-                        backgroundColor: _selectedGenres.isNotEmpty
-                            ? Theme.of(context).colorScheme.primaryContainer
-                            : null,
+                    child: Focus(
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onKeyEvent: _handleFilterButtonKey,
+                      child: IconButton(
+                        focusNode: _filterButtonFocusNode,
+                        icon: const Icon(Icons.filter_list),
+                        tooltip: 'Filter by genre',
+                        style: IconButton.styleFrom(
+                          backgroundColor: _selectedGenres.isNotEmpty
+                              ? Theme.of(context).colorScheme.primaryContainer
+                              : null,
+                        ),
+                        onPressed: _openGenreFilterDialog,
                       ),
-                      onPressed: _openGenreFilterDialog,
                     ),
                   ),
                 ],
