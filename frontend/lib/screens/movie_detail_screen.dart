@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -175,11 +176,23 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
             fit: StackFit.expand,
             children: [
               if (_movie.backdropUrl != null)
-                Image.network(
-                  _movie.backdropUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      Container(color: Colors.black),
+                ClipRect(
+                  child: Transform.scale(
+                    scale: 1.15,
+                    child: ImageFiltered(
+                      imageFilter: ui.ImageFilter.blur(
+                        // Change these to increase/decrease the backdrop blur
+                        sigmaX: 0,
+                        sigmaY: 0,
+                      ),
+                      child: Image.network(
+                        _movie.backdropUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Container(color: Colors.black),
+                      ),
+                    ),
+                  ),
                 )
               else
                 Container(color: Colors.black),
