@@ -924,6 +924,94 @@ class _GenreFilterDialog extends StatefulWidget {
 class _GenreFilterDialogState extends State<_GenreFilterDialog> {
   late final Set<String> _draft = {...widget.initiallySelected};
 
+  // One FocusNode per keyboard stop: a genre checkbox for each entry in
+  // availableGenres, followed by "Clear filters" then "OK". Real,
+  // individually-addressable nodes (rather than one shared node + a manual
+  // "focused index" like the grid's tiles use) since CheckboxListTile/
+  // TextButton/FilledButton are already properly focusable widgets with
+  // their own native focus visuals and Space/Enter activation — arrow-key
+  // navigation just needs to move real focus between them.
+  late final List<FocusNode> _focusNodes = List.generate(
+    widget.availableGenres.length + 2,
+    (i) => FocusNode(debugLabel: 'genre filter item $i'),
+  );
+
+  int get _genreCount => widget.availableGenres.length;
+  int get _clearIndex => _genreCount;
+  int get _okIndex => _genreCount + 1;
+
+  @override
+  void dispose() {
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _focusIndex(int index) {
+    if (index < 0 || index >= _focusNodes.length) return;
+    final node = _focusNodes[index];
+    node.requestFocus();
+    // Keeps the newly-focused genre scrolled into view when there are more
+    // genres than fit in the dialog's fixed-height list.
+    final nodeContext = node.context;
+    if (nodeContext != null) {
+      Scrollable.ensureVisible(
+        nodeContext,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  KeyEventResult _handleGenreKey(int index, FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowDown:
+        _focusIndex(index + 1 < _genreCount ? index + 1 : _clearIndex);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        if (index > 0) _focusIndex(index - 1);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  KeyEventResult _handleClearKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowRight:
+        _focusIndex(_okIndex);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        if (_genreCount > 0) _focusIndex(_genreCount - 1);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  KeyEventResult _handleOkKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowLeft:
+        _focusIndex(_clearIndex);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        if (_genreCount > 0) _focusIndex(_genreCount - 1);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -938,33 +1026,54 @@ class _GenreFilterDialogState extends State<_GenreFilterDialog> {
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    for (final genre in widget.availableGenres)
-                      CheckboxListTile(
-                        title: Text(genre),
-                        value: _draft.contains(genre),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        onChanged: (checked) {
-                          setState(() {
-                            if (checked ?? false) {
-                              _draft.add(genre);
-                            } else {
-                              _draft.remove(genre);
-                            }
-                          });
-                        },
+                    for (final (i, genre) in widget.availableGenres.indexed)
+                      Focus(
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: (node, event) =>
+                            _handleGenreKey(i, node, event),
+                        child: CheckboxListTile(
+                          focusNode: _focusNodes[i],
+                          autofocus: i == 0,
+                          title: Text(genre),
+                          value: _draft.contains(genre),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked ?? false) {
+                                _draft.add(genre);
+                              } else {
+                                _draft.remove(genre);
+                              }
+                            });
+                          },
+                        ),
                       ),
                   ],
                 ),
               ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(<String>{}),
-          child: const Text('Clear filters'),
+        Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _handleClearKey,
+          child: TextButton(
+            focusNode: _focusNodes[_clearIndex],
+            autofocus: _genreCount == 0,
+            onPressed: () => Navigator.of(context).pop(<String>{}),
+            child: const Text('Clear filters'),
+          ),
         ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_draft),
-          child: const Text('OK'),
+        Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _handleOkKey,
+          child: FilledButton(
+            focusNode: _focusNodes[_okIndex],
+            onPressed: () => Navigator.of(context).pop(_draft),
+            child: const Text('OK'),
+          ),
         ),
       ],
     );
