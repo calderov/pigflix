@@ -379,7 +379,13 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
         initiallySelected: _selectedGenres,
       ),
     );
-    if (result != null) setState(() => _selectedGenres = result);
+    if (result == null) return;
+    setState(() => _selectedGenres = result);
+    // Both "Clear filters" and "OK" hand keyboard focus back to the grid's
+    // first tile — dismissing the dialog any other way (barrier tap,
+    // Esc/back) returns null above and leaves focus untouched instead.
+    _gridFocusNode.requestFocus();
+    if (_filtered.isNotEmpty) _setFocusedIndex(0);
   }
 
   Future<void> _toggleAdmin() async {
@@ -936,9 +942,10 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
 
 /// Lets the user check as many genres as they like, then confirms with
 /// "OK" (returning the checked set) or resets with "Clear filters"
-/// (returning an empty set) — both close the dialog and apply a result.
-/// Dismissing any other way (barrier tap, Esc/back) returns `null`, which
-/// the caller treats as "no change."
+/// (returning an empty set) — both close the dialog and apply a result
+/// (the caller also resets grid keyboard focus for either one). Dismissing
+/// any other way (barrier tap, Esc/back) returns `null`, which the caller
+/// treats as "no change."
 class _GenreFilterDialog extends StatefulWidget {
   final List<String> availableGenres;
   final Set<String> initiallySelected;
