@@ -318,7 +318,9 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   }
 
   /// Arrow-key navigation away from the genre filter button: Up/Left go
-  /// back to the search field beside it, Down/Right go to the grid.
+  /// back to the search field beside it, Down/Right go to the grid. "F"
+  /// also goes to the search field, rather than re-triggering the dialog
+  /// this button already opens.
   KeyEventResult _handleFilterButtonKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -326,6 +328,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowUp:
       case LogicalKeyboardKey.arrowLeft:
+      case LogicalKeyboardKey.keyS:
         _searchFocusNode.requestFocus();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowDown:
@@ -400,11 +403,10 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
         initiallySelected: _selectedGenres,
       ),
     );
-    if (result == null) return;
-    setState(() => _selectedGenres = result);
-    // Both "Clear filters" and "OK" hand keyboard focus back to the grid's
-    // first tile — dismissing the dialog any other way (barrier tap,
-    // Esc/back) returns null above and leaves focus untouched instead.
+    if (result != null) setState(() => _selectedGenres = result);
+    // Whether confirmed via "Clear filters"/"OK" (result non-null) or
+    // dismissed any other way (barrier tap, Esc/back — result null),
+    // keyboard focus always lands back on the grid's first tile.
     _focusFirstGridItem();
   }
 
