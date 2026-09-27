@@ -79,6 +79,8 @@ function handleDisplayMessage(ws, msg) {
       searchQuery: msg.searchQuery,
       subtitles: msg.subtitles,
       activeSubtitleLang: msg.activeSubtitleLang,
+      availableGenres: msg.availableGenres,
+      selectedGenres: msg.selectedGenres,
     };
     // Stale outside the player screen — cleared so a remote that (re)pairs
     // after the user's navigated away doesn't get handed a leftover
@@ -153,6 +155,8 @@ function handleRemoteMessage(ws, msg) {
     send(displaySocket, { type: 'command', action: msg.action, deltaSeconds: msg.deltaSeconds, lang: msg.lang });
   } else if (msg.type === 'search_query') {
     send(displaySocket, { type: 'search_query', query: msg.query });
+  } else if (msg.type === 'genre_filter') {
+    send(displaySocket, { type: 'genre_filter', genres: msg.genres });
   }
 }
 

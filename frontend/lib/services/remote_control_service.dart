@@ -71,6 +71,7 @@ class RemoteControlService {
         pairingCode.value = null;
       case 'command':
       case 'search_query':
+      case 'genre_filter':
         _commandController.add(msg);
     }
   }
@@ -97,6 +98,8 @@ class RemoteControlService {
     String? searchQuery,
     List<Map<String, String?>>? subtitles,
     String? activeSubtitleLang,
+    List<String>? availableGenres,
+    List<String>? selectedGenres,
   }) {
     _send({
       'type': 'screen',
@@ -112,6 +115,8 @@ class RemoteControlService {
       'searchQuery': ?searchQuery,
       'subtitles': ?subtitles,
       'activeSubtitleLang': ?activeSubtitleLang,
+      'availableGenres': ?availableGenres,
+      'selectedGenres': ?selectedGenres,
     });
   }
 

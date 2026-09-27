@@ -35,6 +35,8 @@ class RemoteWsService {
   final ValueNotifier<String?> currentScreen = ValueNotifier(null);
   final ValueNotifier<MovieInfo?> movieInfo = ValueNotifier(null);
   final ValueNotifier<String> searchQuery = ValueNotifier('');
+  final ValueNotifier<List<String>> availableGenres = ValueNotifier(const []);
+  final ValueNotifier<Set<String>> selectedGenres = ValueNotifier(const {});
   final ValueNotifier<bool> isPlaying = ValueNotifier(true);
   final ValueNotifier<String?> pairError = ValueNotifier(null);
 
@@ -187,6 +189,13 @@ class RemoteWsService {
           activeSubtitleLang: msg['activeSubtitleLang'] as String?,
         );
         searchQuery.value = msg['searchQuery'] as String? ?? '';
+        availableGenres.value =
+            (msg['availableGenres'] as List<dynamic>? ?? const [])
+                .cast<String>();
+        selectedGenres.value =
+            (msg['selectedGenres'] as List<dynamic>? ?? const [])
+                .cast<String>()
+                .toSet();
       case 'playback_state':
         isPlaying.value = msg['isPlaying'] as bool? ?? true;
       case 'unpaired':
@@ -194,6 +203,8 @@ class RemoteWsService {
         currentScreen.value = null;
         movieInfo.value = null;
         searchQuery.value = '';
+        availableGenres.value = const [];
+        selectedGenres.value = const {};
         status.value = ConnectionStatus.awaitingCode;
     }
   }
@@ -229,6 +240,14 @@ class RemoteWsService {
   void clearSearchQuery() {
     _searchDebounce?.cancel();
     _send({'type': 'search_query', 'query': ''});
+  }
+
+  /// Applies a genre filter on the paired display's grid — sent as one
+  /// explicit action (unlike [sendSearchQuery]'s live-typing debounce),
+  /// since it's only ever triggered by an explicit "OK"/"Clear filters" tap
+  /// on the genre filter screen.
+  void sendGenreFilter(Set<String> genres) {
+    _send({'type': 'genre_filter', 'genres': genres.toList()});
   }
 
   /// The display sends poster/backdrop URLs as a path relative to the

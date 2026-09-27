@@ -7,6 +7,7 @@ import '../widgets/dpad.dart';
 import '../widgets/movie_detail_info.dart';
 import '../widgets/pigflix_logo.dart';
 import '../widgets/playback_controls.dart';
+import 'genre_filter_screen.dart';
 
 /// The remote-control screen shown once paired. Its button layout adapts to
 /// whichever screen the web frontend is currently showing, per the
@@ -243,6 +244,36 @@ class RemoteScreen extends StatelessWidget {
                                                 query.isEmpty
                                                     ? 'Search'
                                                     : 'Search: $query',
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ValueListenableBuilder<Set<String>>(
+                                        valueListenable: RemoteWsService
+                                            .instance
+                                            .selectedGenres,
+                                        builder: (context, genres, _) =>
+                                            OutlinedButton.icon(
+                                              onPressed: () {
+                                                tapHaptic();
+                                                Navigator.of(context).push(
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        const GenreFilterScreen(),
+                                                  ),
+                                                );
+                                              },
+                                              icon: const Icon(
+                                                Icons.filter_list,
+                                              ),
+                                              label: Text(
+                                                genres.isEmpty
+                                                    ? 'Filter by genre'
+                                                    : 'Filter: ${genres.join(', ')}',
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),

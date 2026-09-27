@@ -34,9 +34,13 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   late Future<List<Movie>> _moviesFuture;
   List<Movie> _allMovies = [];
   String _query = '';
+  Set<String> _selectedGenres = {};
 
   final FocusNode _gridFocusNode = FocusNode(debugLabel: 'movie grid');
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search field');
+  final FocusNode _filterButtonFocusNode = FocusNode(
+    debugLabel: 'genre filter button',
+  );
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _gridScrollController = ScrollController();
   // Guards against the search field's onChanged firing (and re-broadcasting
@@ -66,7 +70,12 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   }
 
   void _broadcastScreenState() {
-    RemoteControlService.instance.sendScreenState('grid', searchQuery: _query);
+    RemoteControlService.instance.sendScreenState(
+      'grid',
+      searchQuery: _query,
+      availableGenres: _availableGenres,
+      selectedGenres: _selectedGenres.toList(),
+    );
   }
 
   @override
@@ -82,6 +91,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     _gridFocusNode.removeListener(_onGridFocusChange);
     _gridFocusNode.dispose();
     _searchFocusNode.dispose();
+    _filterButtonFocusNode.dispose();
     _searchController.dispose();
     _gridScrollController.dispose();
     super.dispose();
@@ -111,6 +121,14 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
       _broadcastScreenState();
       return;
     }
+    if (msg['type'] == 'genre_filter') {
+      final genres = (msg['genres'] as List<dynamic>? ?? [])
+          .cast<String>()
+          .toSet();
+      setState(() => _selectedGenres = genres);
+      _broadcastScreenState();
+      return;
+    }
     if (msg['type'] != 'command' || movies.isEmpty) return;
     switch (msg['action']) {
       case 'move_up':
@@ -131,13 +149,30 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   Future<List<Movie>> _load() async {
     final movies = await _api.fetchMovies();
     setState(() => _allMovies = movies);
+    // The initial broadcast (from initState) fires before movies are
+    // loaded, so a paired remote connecting shortly after would otherwise
+    // be handed a stale "no genres available yet" screen state forever,
+    // since nothing else re-broadcasts once loading finishes.
+    _broadcastScreenState();
     return movies;
   }
 
   List<Movie> get _filtered {
-    if (_query.isEmpty) return _allMovies;
-    final q = _query.toLowerCase();
-    return _allMovies.where((m) => m.title.toLowerCase().contains(q)).toList();
+    Iterable<Movie> result = _allMovies;
+    if (_query.isNotEmpty) {
+      final q = _query.toLowerCase();
+      result = result.where((m) => m.title.toLowerCase().contains(q));
+    }
+    if (_selectedGenres.isNotEmpty) {
+      result = result.where((m) => m.genres.any(_selectedGenres.contains));
+    }
+    return result.toList();
+  }
+
+  List<String> get _availableGenres {
+    final genres = _allMovies.expand((m) => m.genres).toSet().toList();
+    genres.sort();
+    return genres;
   }
 
   void _openMovie(Movie movie) {
@@ -182,6 +217,15 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
       _focusedTileIndex = newIndex;
     });
     _revealFocusedTile(newIndex);
+  }
+
+  /// Moves keyboard focus onto the grid and selects its first tile — used
+  /// wherever something hands focus over to the grid from elsewhere (the
+  /// genre filter button/dialog, the search field's Enter key), rather
+  /// than leaving it on whatever tile happened to be focused last.
+  void _focusFirstGridItem() {
+    _gridFocusNode.requestFocus();
+    if (_filtered.isNotEmpty) _setFocusedIndex(0);
   }
 
   /// Left/right always move by one tile, clamped to the ends of the list —
@@ -275,6 +319,45 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     return KeyEventResult.handled;
   }
 
+  /// Opens the genre filter dialog on "f", same idea as "s" jumping to
+  /// search — except here we explicitly bail out while the search field
+  /// itself has focus, so a movie title containing an "f" doesn't get
+  /// interrupted mid-search by the dialog popping open.
+  KeyEventResult _handleJumpToFilter(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.keyF) {
+      return KeyEventResult.ignored;
+    }
+    if (_searchFocusNode.hasFocus) return KeyEventResult.ignored;
+    _openGenreFilterDialog();
+    return KeyEventResult.handled;
+  }
+
+  /// Arrow-key navigation away from the genre filter button: Up/Left go
+  /// back to the search field beside it, Down/Right go to the grid. "F"
+  /// also goes to the search field, rather than re-triggering the dialog
+  /// this button already opens.
+  KeyEventResult _handleFilterButtonKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowUp:
+      case LogicalKeyboardKey.arrowLeft:
+      case LogicalKeyboardKey.keyS:
+        _searchFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowDown:
+      case LogicalKeyboardKey.arrowRight:
+        _focusFirstGridItem();
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
   KeyEventResult _handleGridKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -282,6 +365,9 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
 
     final jumpedToSearch = _handleJumpToSearch(node, event);
     if (jumpedToSearch == KeyEventResult.handled) return jumpedToSearch;
+
+    final jumpedToFilter = _handleJumpToFilter(node, event);
+    if (jumpedToFilter == KeyEventResult.handled) return jumpedToFilter;
 
     final movies = _filtered;
     if (movies.isEmpty) return KeyEventResult.ignored;
@@ -304,6 +390,19 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
       case LogicalKeyboardKey.space:
         _openMovie(movies[_clampFocusIndex(_focusedTileIndex, movies.length)]);
         return KeyEventResult.handled;
+      case LogicalKeyboardKey.tab:
+        if (HardwareKeyboard.instance.isShiftPressed) {
+          // Leave backward traversal alone — it already lands on the
+          // filter button, which is still in the Tab loop.
+          return KeyEventResult.ignored;
+        }
+        // With the pairing/admin/refresh buttons excluded from the Tab
+        // loop, the grid is now the last stop in forward order. Without
+        // this, pressing Tab here falls out of the Flutter view entirely
+        // (to the browser's own document body) instead of cycling back
+        // around, since the traversal policy doesn't wrap on its own.
+        _searchFocusNode.requestFocus();
+        return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
     }
@@ -312,6 +411,27 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   void _openRemotePairingDialog() {
     RemoteControlService.instance.requestPairingCode();
     showDialog(context: context, builder: (_) => const _RemotePairingDialog());
+  }
+
+  Future<void> _openGenreFilterDialog() async {
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _GenreFilterDialog(
+        availableGenres: _availableGenres,
+        initiallySelected: _selectedGenres,
+      ),
+    );
+    if (result != null) {
+      // "Clear filters"/"OK" always land on the grid's first tile.
+      setState(() => _selectedGenres = result);
+      _focusFirstGridItem();
+    } else {
+      // Dismissed any other way (barrier tap, Esc/back): return focus to
+      // whichever tile was last selected (_focusedTileIndex is untouched
+      // while the dialog is open, and defaults to 0 if nothing was ever
+      // selected), rather than resetting to the first tile.
+      _gridFocusNode.requestFocus();
+    }
   }
 
   Future<void> _toggleAdmin() async {
@@ -349,27 +469,34 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
           backgroundColor: Theme.of(context).colorScheme.surface,
           title: Image.asset('assets/images/logo.png', height: 32),
           actions: [
-            // Non-focusable, key-only: lets "S" jump to the search field
-            // from either button without adding an extra Tab stop.
+            // Non-focusable, key-only: lets "S"/"F" jump to the search
+            // field or open the genre filter dialog from either button
+            // without adding an extra Tab stop.
             Focus(
               canRequestFocus: false,
               skipTraversal: true,
-              onKeyEvent: _handleJumpToSearch,
+              onKeyEvent: (node, event) {
+                final searchResult = _handleJumpToSearch(node, event);
+                if (searchResult == KeyEventResult.handled) return searchResult;
+                return _handleJumpToFilter(node, event);
+              },
               child: Padding(
                 padding: const EdgeInsets.only(right: 20),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(3),
+                    // Excluded from Tab traversal entirely (unlike the
+                    // search field/filter button/grid, which stay in the
+                    // Tab loop) — still reachable by mouse/touch, and by
+                    // the "S"/"F" key shortcuts above for search/filter.
+                    ExcludeFocusTraversal(
                       child: IconButton(
                         icon: const Icon(Icons.settings_remote),
                         tooltip: 'Pair remote control',
                         onPressed: _openRemotePairingDialog,
                       ),
                     ),
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(4),
+                    ExcludeFocusTraversal(
                       child: ValueListenableBuilder<bool>(
                         valueListenable: AdminSession.isAdmin,
                         builder: (context, isAdmin, _) => IconButton(
@@ -381,8 +508,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                         ),
                       ),
                     ),
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(5),
+                    ExcludeFocusTraversal(
                       child: IconButton(
                         icon: const Icon(Icons.refresh),
                         tooltip: 'Refresh library',
@@ -399,26 +525,53 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
             preferredSize: const Size.fromHeight(56),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 20, 8),
-              child: FocusTraversalOrder(
-                order: const NumericFocusOrder(1),
-                child: TextField(
-                  focusNode: _searchFocusNode,
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search movies…',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FocusTraversalOrder(
+                      order: const NumericFocusOrder(1),
+                      child: TextField(
+                        focusNode: _searchFocusNode,
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search movies…',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        onChanged: (value) {
+                          if (_syncingSearchFromRemote) return;
+                          setState(() => _query = value);
+                          _broadcastScreenState();
+                        },
+                        onSubmitted: (_) => _focusFirstGridItem(),
+                      ),
                     ),
                   ),
-                  onChanged: (value) {
-                    if (_syncingSearchFromRemote) return;
-                    setState(() => _query = value);
-                    _broadcastScreenState();
-                  },
-                ),
+                  const SizedBox(width: 8),
+                  FocusTraversalOrder(
+                    order: const NumericFocusOrder(2),
+                    child: Focus(
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onKeyEvent: _handleFilterButtonKey,
+                      child: IconButton(
+                        focusNode: _filterButtonFocusNode,
+                        icon: const Icon(Icons.filter_list),
+                        tooltip: 'Filter by genre',
+                        style: IconButton.styleFrom(
+                          backgroundColor: _selectedGenres.isNotEmpty
+                              ? Theme.of(context).colorScheme.primaryContainer
+                              : null,
+                        ),
+                        onPressed: _openGenreFilterDialog,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -434,14 +587,22 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
             }
 
             final movies = _filtered;
+            final filterSummary = _buildFilterSummary();
+
             if (movies.isEmpty) {
-              return Center(
-                child: Text(
-                  _allMovies.isEmpty
-                      ? 'No movies yet. Drop files into the backend\'s movies/ folder.'
-                      : 'No movies match "$_query".',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
+              return Column(
+                children: [
+                  filterSummary,
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        _buildEmptyMessage(),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                  ),
+                ],
               );
             }
 
@@ -450,41 +611,77 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
               movies.length,
             );
 
-            return FocusTraversalOrder(
-              order: const NumericFocusOrder(2),
-              child: Focus(
-                focusNode: _gridFocusNode,
-                autofocus: true,
-                onKeyEvent: _handleGridKey,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    _updateGridMetrics(constraints.maxWidth);
-                    return GridView.builder(
-                      controller: _gridScrollController,
-                      padding: const EdgeInsets.all(_gridPadding),
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: _gridMaxCrossAxisExtent,
-                            childAspectRatio: _gridChildAspectRatio,
-                            crossAxisSpacing: _gridCrossAxisSpacing,
-                            mainAxisSpacing: _gridMainAxisSpacing,
-                          ),
-                      itemCount: movies.length,
-                      itemBuilder: (context, index) => _MovieTile(
-                        movie: movies[index],
-                        onTap: () => _openMovie(movies[index]),
-                        focused:
-                            _gridFocusNode.hasFocus && index == focusedIndex,
+            return Column(
+              children: [
+                filterSummary,
+                Expanded(
+                  child: FocusTraversalOrder(
+                    order: const NumericFocusOrder(3),
+                    child: Focus(
+                      focusNode: _gridFocusNode,
+                      autofocus: true,
+                      onKeyEvent: _handleGridKey,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          _updateGridMetrics(constraints.maxWidth);
+                          return GridView.builder(
+                            controller: _gridScrollController,
+                            padding: const EdgeInsets.all(_gridPadding),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: _gridMaxCrossAxisExtent,
+                                  childAspectRatio: _gridChildAspectRatio,
+                                  crossAxisSpacing: _gridCrossAxisSpacing,
+                                  mainAxisSpacing: _gridMainAxisSpacing,
+                                ),
+                            itemCount: movies.length,
+                            itemBuilder: (context, index) => _MovieTile(
+                              movie: movies[index],
+                              onTap: () => _openMovie(movies[index]),
+                              focused: _gridFocusNode.hasFocus &&
+                                  index == focusedIndex,
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
-              ),
+              ],
             );
           },
         ),
       ),
     );
+  }
+
+  Widget _buildFilterSummary() {
+    if (_selectedGenres.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Text(
+        'Showing movies in the following categories: ${_selectedGenres.join(', ')}',
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+      ),
+    );
+  }
+
+  String _buildEmptyMessage() {
+    if (_allMovies.isEmpty) {
+      return 'No movies yet. Drop files into the backend\'s movies folder.';
+    }
+    final hasQuery = _query.isNotEmpty;
+    final hasGenres = _selectedGenres.isNotEmpty;
+    final genresLabel = _selectedGenres.join(' or ');
+    if (hasQuery && hasGenres) {
+      return 'No movies match "$_query" in $genresLabel.';
+    }
+    if (hasGenres) {
+      return 'No movies in $genresLabel.';
+    }
+    return 'No movies match "$_query".';
   }
 
   Widget _buildError(String message) {
@@ -785,6 +982,184 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lets the user check as many genres as they like, then confirms with
+/// "OK" (returning the checked set) or resets with "Clear filters"
+/// (returning an empty set) — both close the dialog and apply a result
+/// (the caller also resets grid keyboard focus for either one). Dismissing
+/// any other way (barrier tap, Esc/back) returns `null`, which the caller
+/// treats as "no change."
+class _GenreFilterDialog extends StatefulWidget {
+  final List<String> availableGenres;
+  final Set<String> initiallySelected;
+
+  const _GenreFilterDialog({
+    required this.availableGenres,
+    required this.initiallySelected,
+  });
+
+  @override
+  State<_GenreFilterDialog> createState() => _GenreFilterDialogState();
+}
+
+class _GenreFilterDialogState extends State<_GenreFilterDialog> {
+  late final Set<String> _draft = {...widget.initiallySelected};
+
+  // One FocusNode per keyboard stop: a genre checkbox for each entry in
+  // availableGenres, followed by "Clear filters" then "OK". Real,
+  // individually-addressable nodes (rather than one shared node + a manual
+  // "focused index" like the grid's tiles use) since CheckboxListTile/
+  // TextButton/FilledButton are already properly focusable widgets with
+  // their own native focus visuals and Space/Enter activation — arrow-key
+  // navigation just needs to move real focus between them.
+  late final List<FocusNode> _focusNodes = List.generate(
+    widget.availableGenres.length + 2,
+    (i) => FocusNode(debugLabel: 'genre filter item $i'),
+  );
+
+  int get _genreCount => widget.availableGenres.length;
+  int get _clearIndex => _genreCount;
+  int get _okIndex => _genreCount + 1;
+
+  @override
+  void dispose() {
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _focusIndex(int index) {
+    if (index < 0 || index >= _focusNodes.length) return;
+    final node = _focusNodes[index];
+    node.requestFocus();
+    // Keeps the newly-focused genre scrolled into view when there are more
+    // genres than fit in the dialog's fixed-height list.
+    final nodeContext = node.context;
+    if (nodeContext != null) {
+      Scrollable.ensureVisible(
+        nodeContext,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  KeyEventResult _handleGenreKey(int index, FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowDown:
+        _focusIndex(index + 1 < _genreCount ? index + 1 : _clearIndex);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        if (index > 0) _focusIndex(index - 1);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  KeyEventResult _handleClearKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowRight:
+        _focusIndex(_okIndex);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        if (_genreCount > 0) _focusIndex(_genreCount - 1);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  KeyEventResult _handleOkKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowLeft:
+        _focusIndex(_clearIndex);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        if (_genreCount > 0) _focusIndex(_genreCount - 1);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      title: const Text('Filter by genre'),
+      content: SizedBox(
+        width: 320,
+        child: widget.availableGenres.isEmpty
+            ? const Text('No genres available yet.')
+            : SizedBox(
+                height: 320,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final (i, genre) in widget.availableGenres.indexed)
+                      Focus(
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: (node, event) =>
+                            _handleGenreKey(i, node, event),
+                        child: CheckboxListTile(
+                          focusNode: _focusNodes[i],
+                          autofocus: i == 0,
+                          title: Text(genre),
+                          value: _draft.contains(genre),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked ?? false) {
+                                _draft.add(genre);
+                              } else {
+                                _draft.remove(genre);
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+      ),
+      actions: [
+        Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _handleClearKey,
+          child: TextButton(
+            focusNode: _focusNodes[_clearIndex],
+            autofocus: _genreCount == 0,
+            onPressed: () => Navigator.of(context).pop(<String>{}),
+            child: const Text('Clear filters'),
+          ),
+        ),
+        Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _handleOkKey,
+          child: FilledButton(
+            focusNode: _focusNodes[_okIndex],
+            onPressed: () => Navigator.of(context).pop(_draft),
+            child: const Text('OK'),
+          ),
         ),
       ],
     );
