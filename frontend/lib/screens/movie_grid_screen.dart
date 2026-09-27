@@ -403,11 +403,17 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
         initiallySelected: _selectedGenres,
       ),
     );
-    if (result != null) setState(() => _selectedGenres = result);
-    // Whether confirmed via "Clear filters"/"OK" (result non-null) or
-    // dismissed any other way (barrier tap, Esc/back — result null),
-    // keyboard focus always lands back on the grid's first tile.
-    _focusFirstGridItem();
+    if (result != null) {
+      // "Clear filters"/"OK" always land on the grid's first tile.
+      setState(() => _selectedGenres = result);
+      _focusFirstGridItem();
+    } else {
+      // Dismissed any other way (barrier tap, Esc/back): return focus to
+      // whichever tile was last selected (_focusedTileIndex is untouched
+      // while the dialog is open, and defaults to 0 if nothing was ever
+      // selected), rather than resetting to the first tile.
+      _gridFocusNode.requestFocus();
+    }
   }
 
   Future<void> _toggleAdmin() async {
