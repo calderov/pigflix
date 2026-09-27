@@ -201,6 +201,15 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     _revealFocusedTile(newIndex);
   }
 
+  /// Moves keyboard focus onto the grid and selects its first tile — used
+  /// wherever something hands focus over to the grid from elsewhere (the
+  /// genre filter button/dialog, the search field's Enter key), rather
+  /// than leaving it on whatever tile happened to be focused last.
+  void _focusFirstGridItem() {
+    _gridFocusNode.requestFocus();
+    if (_filtered.isNotEmpty) _setFocusedIndex(0);
+  }
+
   /// Left/right always move by one tile, clamped to the ends of the list —
   /// there's no notion of a "boundary row" for horizontal movement.
   void _moveFocusHorizontal(int delta, int length) {
@@ -321,8 +330,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowDown:
       case LogicalKeyboardKey.arrowRight:
-        _gridFocusNode.requestFocus();
-        if (_filtered.isNotEmpty) _setFocusedIndex(0);
+        _focusFirstGridItem();
         return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
@@ -384,8 +392,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     // Both "Clear filters" and "OK" hand keyboard focus back to the grid's
     // first tile — dismissing the dialog any other way (barrier tap,
     // Esc/back) returns null above and leaves focus untouched instead.
-    _gridFocusNode.requestFocus();
-    if (_filtered.isNotEmpty) _setFocusedIndex(0);
+    _focusFirstGridItem();
   }
 
   Future<void> _toggleAdmin() async {
@@ -500,6 +507,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                           setState(() => _query = value);
                           _broadcastScreenState();
                         },
+                        onSubmitted: (_) => _focusFirstGridItem(),
                       ),
                     ),
                   ),
@@ -612,7 +620,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Text(
-        'Filtered by: ${_selectedGenres.join(', ')}',
+        'Showing movies in the following categories: ${_selectedGenres.join(', ')}',
         style: Theme.of(
           context,
         ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
