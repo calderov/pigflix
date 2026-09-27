@@ -34,6 +34,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   late Future<List<Movie>> _moviesFuture;
   List<Movie> _allMovies = [];
   String _query = '';
+  Set<String> _selectedGenres = {};
 
   final FocusNode _gridFocusNode = FocusNode(debugLabel: 'movie grid');
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search field');
@@ -135,9 +136,21 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   }
 
   List<Movie> get _filtered {
-    if (_query.isEmpty) return _allMovies;
-    final q = _query.toLowerCase();
-    return _allMovies.where((m) => m.title.toLowerCase().contains(q)).toList();
+    Iterable<Movie> result = _allMovies;
+    if (_query.isNotEmpty) {
+      final q = _query.toLowerCase();
+      result = result.where((m) => m.title.toLowerCase().contains(q));
+    }
+    if (_selectedGenres.isNotEmpty) {
+      result = result.where((m) => m.genres.any(_selectedGenres.contains));
+    }
+    return result.toList();
+  }
+
+  List<String> get _availableGenres {
+    final genres = _allMovies.expand((m) => m.genres).toSet().toList();
+    genres.sort();
+    return genres;
   }
 
   void _openMovie(Movie movie) {
@@ -275,6 +288,22 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     return KeyEventResult.handled;
   }
 
+  /// Opens the genre filter dialog on "f", same idea as "s" jumping to
+  /// search — except here we explicitly bail out while the search field
+  /// itself has focus, so a movie title containing an "f" doesn't get
+  /// interrupted mid-search by the dialog popping open.
+  KeyEventResult _handleJumpToFilter(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.keyF) {
+      return KeyEventResult.ignored;
+    }
+    if (_searchFocusNode.hasFocus) return KeyEventResult.ignored;
+    _openGenreFilterDialog();
+    return KeyEventResult.handled;
+  }
+
   KeyEventResult _handleGridKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -282,6 +311,9 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
 
     final jumpedToSearch = _handleJumpToSearch(node, event);
     if (jumpedToSearch == KeyEventResult.handled) return jumpedToSearch;
+
+    final jumpedToFilter = _handleJumpToFilter(node, event);
+    if (jumpedToFilter == KeyEventResult.handled) return jumpedToFilter;
 
     final movies = _filtered;
     if (movies.isEmpty) return KeyEventResult.ignored;
@@ -312,6 +344,17 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   void _openRemotePairingDialog() {
     RemoteControlService.instance.requestPairingCode();
     showDialog(context: context, builder: (_) => const _RemotePairingDialog());
+  }
+
+  Future<void> _openGenreFilterDialog() async {
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _GenreFilterDialog(
+        availableGenres: _availableGenres,
+        initiallySelected: _selectedGenres,
+      ),
+    );
+    if (result != null) setState(() => _selectedGenres = result);
   }
 
   Future<void> _toggleAdmin() async {
@@ -349,19 +392,24 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
           backgroundColor: Theme.of(context).colorScheme.surface,
           title: Image.asset('assets/images/logo.png', height: 32),
           actions: [
-            // Non-focusable, key-only: lets "S" jump to the search field
-            // from either button without adding an extra Tab stop.
+            // Non-focusable, key-only: lets "S"/"F" jump to the search
+            // field or open the genre filter dialog from either button
+            // without adding an extra Tab stop.
             Focus(
               canRequestFocus: false,
               skipTraversal: true,
-              onKeyEvent: _handleJumpToSearch,
+              onKeyEvent: (node, event) {
+                final searchResult = _handleJumpToSearch(node, event);
+                if (searchResult == KeyEventResult.handled) return searchResult;
+                return _handleJumpToFilter(node, event);
+              },
               child: Padding(
                 padding: const EdgeInsets.only(right: 20),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     FocusTraversalOrder(
-                      order: const NumericFocusOrder(3),
+                      order: const NumericFocusOrder(4),
                       child: IconButton(
                         icon: const Icon(Icons.settings_remote),
                         tooltip: 'Pair remote control',
@@ -369,7 +417,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                       ),
                     ),
                     FocusTraversalOrder(
-                      order: const NumericFocusOrder(4),
+                      order: const NumericFocusOrder(5),
                       child: ValueListenableBuilder<bool>(
                         valueListenable: AdminSession.isAdmin,
                         builder: (context, isAdmin, _) => IconButton(
@@ -382,7 +430,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                       ),
                     ),
                     FocusTraversalOrder(
-                      order: const NumericFocusOrder(5),
+                      order: const NumericFocusOrder(6),
                       child: IconButton(
                         icon: const Icon(Icons.refresh),
                         tooltip: 'Refresh library',
@@ -399,26 +447,46 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
             preferredSize: const Size.fromHeight(56),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 20, 8),
-              child: FocusTraversalOrder(
-                order: const NumericFocusOrder(1),
-                child: TextField(
-                  focusNode: _searchFocusNode,
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search movies…',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FocusTraversalOrder(
+                      order: const NumericFocusOrder(1),
+                      child: TextField(
+                        focusNode: _searchFocusNode,
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search movies…',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        onChanged: (value) {
+                          if (_syncingSearchFromRemote) return;
+                          setState(() => _query = value);
+                          _broadcastScreenState();
+                        },
+                      ),
                     ),
                   ),
-                  onChanged: (value) {
-                    if (_syncingSearchFromRemote) return;
-                    setState(() => _query = value);
-                    _broadcastScreenState();
-                  },
-                ),
+                  const SizedBox(width: 8),
+                  FocusTraversalOrder(
+                    order: const NumericFocusOrder(2),
+                    child: IconButton(
+                      icon: const Icon(Icons.filter_list),
+                      tooltip: 'Filter by genre',
+                      style: IconButton.styleFrom(
+                        backgroundColor: _selectedGenres.isNotEmpty
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : null,
+                      ),
+                      onPressed: _openGenreFilterDialog,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -434,14 +502,22 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
             }
 
             final movies = _filtered;
+            final filterSummary = _buildFilterSummary();
+
             if (movies.isEmpty) {
-              return Center(
-                child: Text(
-                  _allMovies.isEmpty
-                      ? 'No movies yet. Drop files into the backend\'s movies/ folder.'
-                      : 'No movies match "$_query".',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
+              return Column(
+                children: [
+                  filterSummary,
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        _buildEmptyMessage(),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                  ),
+                ],
               );
             }
 
@@ -450,41 +526,77 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
               movies.length,
             );
 
-            return FocusTraversalOrder(
-              order: const NumericFocusOrder(2),
-              child: Focus(
-                focusNode: _gridFocusNode,
-                autofocus: true,
-                onKeyEvent: _handleGridKey,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    _updateGridMetrics(constraints.maxWidth);
-                    return GridView.builder(
-                      controller: _gridScrollController,
-                      padding: const EdgeInsets.all(_gridPadding),
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: _gridMaxCrossAxisExtent,
-                            childAspectRatio: _gridChildAspectRatio,
-                            crossAxisSpacing: _gridCrossAxisSpacing,
-                            mainAxisSpacing: _gridMainAxisSpacing,
-                          ),
-                      itemCount: movies.length,
-                      itemBuilder: (context, index) => _MovieTile(
-                        movie: movies[index],
-                        onTap: () => _openMovie(movies[index]),
-                        focused:
-                            _gridFocusNode.hasFocus && index == focusedIndex,
+            return Column(
+              children: [
+                filterSummary,
+                Expanded(
+                  child: FocusTraversalOrder(
+                    order: const NumericFocusOrder(3),
+                    child: Focus(
+                      focusNode: _gridFocusNode,
+                      autofocus: true,
+                      onKeyEvent: _handleGridKey,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          _updateGridMetrics(constraints.maxWidth);
+                          return GridView.builder(
+                            controller: _gridScrollController,
+                            padding: const EdgeInsets.all(_gridPadding),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: _gridMaxCrossAxisExtent,
+                                  childAspectRatio: _gridChildAspectRatio,
+                                  crossAxisSpacing: _gridCrossAxisSpacing,
+                                  mainAxisSpacing: _gridMainAxisSpacing,
+                                ),
+                            itemCount: movies.length,
+                            itemBuilder: (context, index) => _MovieTile(
+                              movie: movies[index],
+                              onTap: () => _openMovie(movies[index]),
+                              focused: _gridFocusNode.hasFocus &&
+                                  index == focusedIndex,
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
-              ),
+              ],
             );
           },
         ),
       ),
     );
+  }
+
+  Widget _buildFilterSummary() {
+    if (_selectedGenres.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Text(
+        'Filtered by: ${_selectedGenres.join(', ')}',
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+      ),
+    );
+  }
+
+  String _buildEmptyMessage() {
+    if (_allMovies.isEmpty) {
+      return 'No movies yet. Drop files into the backend\'s movies folder.';
+    }
+    final hasQuery = _query.isNotEmpty;
+    final hasGenres = _selectedGenres.isNotEmpty;
+    final genresLabel = _selectedGenres.join(' or ');
+    if (hasQuery && hasGenres) {
+      return 'No movies match "$_query" in $genresLabel.';
+    }
+    if (hasGenres) {
+      return 'No movies in $genresLabel.';
+    }
+    return 'No movies match "$_query".';
   }
 
   Widget _buildError(String message) {
@@ -785,6 +897,73 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lets the user check as many genres as they like, then confirms with
+/// "OK" (returning the checked set) or resets with "Clear filters"
+/// (returning an empty set) — both close the dialog and apply a result.
+/// Dismissing any other way (barrier tap, Esc/back) returns `null`, which
+/// the caller treats as "no change."
+class _GenreFilterDialog extends StatefulWidget {
+  final List<String> availableGenres;
+  final Set<String> initiallySelected;
+
+  const _GenreFilterDialog({
+    required this.availableGenres,
+    required this.initiallySelected,
+  });
+
+  @override
+  State<_GenreFilterDialog> createState() => _GenreFilterDialogState();
+}
+
+class _GenreFilterDialogState extends State<_GenreFilterDialog> {
+  late final Set<String> _draft = {...widget.initiallySelected};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Filter by genre'),
+      content: SizedBox(
+        width: 320,
+        child: widget.availableGenres.isEmpty
+            ? const Text('No genres available yet.')
+            : SizedBox(
+                height: 320,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final genre in widget.availableGenres)
+                      CheckboxListTile(
+                        title: Text(genre),
+                        value: _draft.contains(genre),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: (checked) {
+                          setState(() {
+                            if (checked ?? false) {
+                              _draft.add(genre);
+                            } else {
+                              _draft.remove(genre);
+                            }
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(<String>{}),
+          child: const Text('Clear filters'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_draft),
+          child: const Text('OK'),
         ),
       ],
     );
