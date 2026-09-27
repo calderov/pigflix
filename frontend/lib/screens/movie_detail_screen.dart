@@ -181,8 +181,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
                     scale: 1.15,
                     child: ImageFiltered(
                       imageFilter: ui.ImageFilter.blur(
-                        sigmaX: 30,
-                        sigmaY: 30,
+                        // Change these to increase/decrease the backdrop blur
+                        sigmaX: 0,
+                        sigmaY: 0,
                       ),
                       child: Image.network(
                         _movie.backdropUrl!,
