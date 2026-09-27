@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/movie.dart';
 import '../services/admin_session.dart';
@@ -969,21 +970,48 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
                     ],
                   );
                 }
+                final address = lanServerAddress ?? backendHostPort;
+                final qrData = Uri(
+                  scheme: 'pigflix',
+                  host: 'pair',
+                  queryParameters: {'host': address, 'code': code},
+                ).toString();
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: QrImageView(
+                        data: qrData,
+                        size: 180,
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Scan with the Pigflix Remote app',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
                     Text(
                       code,
                       style: const TextStyle(
-                        fontSize: 40,
+                        fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 6,
+                        letterSpacing: 4,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Enter this on the Pigflix Remote app',
+                    const SizedBox(height: 4),
+                    Text(
+                      'Or enter this code manually',
                       textAlign: TextAlign.center,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                     ),
                     const SizedBox(height: 20),
                     const Row(

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/remote_ws_service.dart';
 import '../utils/haptics.dart';
 import '../widgets/pigflix_logo.dart';
+import 'qr_scan_screen.dart';
 
 const _hostPrefsKey = 'backend_host';
 
@@ -21,10 +22,13 @@ class PairingScreen extends StatefulWidget {
   State<PairingScreen> createState() => _PairingScreenState();
 }
 
+enum _PairingMode { welcome, manual }
+
 class _PairingScreenState extends State<PairingScreen> {
   final _hostController = TextEditingController();
   final _codeController = TextEditingController();
   bool _loadingStoredHost = true;
+  _PairingMode _mode = _PairingMode.welcome;
 
   @override
   void initState() {
@@ -46,12 +50,39 @@ class _PairingScreenState extends State<PairingScreen> {
   Future<void> _connect(String host) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_hostPrefsKey, host);
-    RemoteWsService.instance.connect('ws://$host');
+    await RemoteWsService.instance.connect('ws://$host');
+  }
+
+  /// Completes both pairing steps from a single scanned QR code: connects
+  /// to the scanned host, then — mirroring exactly what the manual
+  /// "Connect" then "Enter code" flow does — submits the scanned code, but
+  /// only once [RemoteWsService.connect] has actually finished opening the
+  /// socket and is waiting on a code (not, say, still resuming a
+  /// previously-saved session, or failed outright).
+  Future<void> _connectAndSubmit(String host, String code) async {
+    _hostController.text = host;
+    await _connect(host);
+    if (RemoteWsService.instance.status.value ==
+        ConnectionStatus.awaitingCode) {
+      _codeController.text = code;
+      RemoteWsService.instance.submitPairingCode(code);
+    }
+  }
+
+  Future<void> _scanQr() async {
+    tapHaptic();
+    final result = await Navigator.of(
+      context,
+    ).push<({String host, String code})>(
+      MaterialPageRoute(builder: (_) => const QrScanScreen()),
+    );
+    if (result != null) _connectAndSubmit(result.host, result.code);
   }
 
   void _changeServer() {
     tapHaptic();
     RemoteWsService.instance.disconnect();
+    setState(() => _mode = _PairingMode.welcome);
   }
 
   @override
@@ -87,14 +118,25 @@ class _PairingScreenState extends State<PairingScreen> {
                     builder: (context, status, _) {
                       switch (status) {
                         case ConnectionStatus.disconnected:
-                          return _HostForm(
-                            controller: _hostController,
-                            onConnect: () {
-                              tapHaptic();
-                              final host = _hostController.text.trim();
-                              if (host.isNotEmpty) _connect(host);
-                            },
-                          );
+                          return switch (_mode) {
+                            _PairingMode.welcome => _WelcomeForm(
+                              onScan: _scanQr,
+                              onManual: () => setState(
+                                () => _mode = _PairingMode.manual,
+                              ),
+                            ),
+                            _PairingMode.manual => _HostForm(
+                              controller: _hostController,
+                              onConnect: () {
+                                tapHaptic();
+                                final host = _hostController.text.trim();
+                                if (host.isNotEmpty) _connect(host);
+                              },
+                              onBack: () => setState(
+                                () => _mode = _PairingMode.welcome,
+                              ),
+                            ),
+                          };
                         case ConnectionStatus.connecting:
                           return const Column(
                             mainAxisSize: MainAxisSize.min,
@@ -138,11 +180,63 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 }
 
+/// Landing view shown whenever the app isn't linked to a Pigflix server —
+/// lets the user pick a pairing method up front, rather than defaulting
+/// straight into the manual host-entry form.
+class _WelcomeForm extends StatelessWidget {
+  final VoidCallback onScan;
+  final VoidCallback onManual;
+
+  const _WelcomeForm({required this.onScan, required this.onManual});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.settings_remote, size: 48),
+        const SizedBox(height: 16),
+        Text(
+          'Pigflix Link',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'How would you like to pair with Pigflix?',
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: onScan,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Scan QR code'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: onManual,
+            child: const Text('Enter manually'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _HostForm extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onConnect;
+  final VoidCallback onBack;
 
-  const _HostForm({required this.controller, required this.onConnect});
+  const _HostForm({
+    required this.controller,
+    required this.onConnect,
+    required this.onBack,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +283,7 @@ class _HostForm extends StatelessWidget {
             child: const Text('Connect'),
           ),
         ),
+        TextButton(onPressed: onBack, child: const Text('Back')),
       ],
     );
   }
