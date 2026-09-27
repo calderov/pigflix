@@ -70,7 +70,12 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   }
 
   void _broadcastScreenState() {
-    RemoteControlService.instance.sendScreenState('grid', searchQuery: _query);
+    RemoteControlService.instance.sendScreenState(
+      'grid',
+      searchQuery: _query,
+      availableGenres: _availableGenres,
+      selectedGenres: _selectedGenres.toList(),
+    );
   }
 
   @override
@@ -116,6 +121,14 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
       _broadcastScreenState();
       return;
     }
+    if (msg['type'] == 'genre_filter') {
+      final genres = (msg['genres'] as List<dynamic>? ?? [])
+          .cast<String>()
+          .toSet();
+      setState(() => _selectedGenres = genres);
+      _broadcastScreenState();
+      return;
+    }
     if (msg['type'] != 'command' || movies.isEmpty) return;
     switch (msg['action']) {
       case 'move_up':
@@ -136,6 +149,11 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   Future<List<Movie>> _load() async {
     final movies = await _api.fetchMovies();
     setState(() => _allMovies = movies);
+    // The initial broadcast (from initState) fires before movies are
+    // loaded, so a paired remote connecting shortly after would otherwise
+    // be handed a stale "no genres available yet" screen state forever,
+    // since nothing else re-broadcasts once loading finishes.
+    _broadcastScreenState();
     return movies;
   }
 
