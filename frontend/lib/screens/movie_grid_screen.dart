@@ -369,6 +369,19 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
       case LogicalKeyboardKey.space:
         _openMovie(movies[_clampFocusIndex(_focusedTileIndex, movies.length)]);
         return KeyEventResult.handled;
+      case LogicalKeyboardKey.tab:
+        if (HardwareKeyboard.instance.isShiftPressed) {
+          // Leave backward traversal alone — it already lands on the
+          // filter button, which is still in the Tab loop.
+          return KeyEventResult.ignored;
+        }
+        // With the pairing/admin/refresh buttons excluded from the Tab
+        // loop, the grid is now the last stop in forward order. Without
+        // this, pressing Tab here falls out of the Flutter view entirely
+        // (to the browser's own document body) instead of cycling back
+        // around, since the traversal policy doesn't wrap on its own.
+        _searchFocusNode.requestFocus();
+        return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
     }
@@ -446,16 +459,18 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(4),
+                    // Excluded from Tab traversal entirely (unlike the
+                    // search field/filter button/grid, which stay in the
+                    // Tab loop) — still reachable by mouse/touch, and by
+                    // the "S"/"F" key shortcuts above for search/filter.
+                    ExcludeFocusTraversal(
                       child: IconButton(
                         icon: const Icon(Icons.settings_remote),
                         tooltip: 'Pair remote control',
                         onPressed: _openRemotePairingDialog,
                       ),
                     ),
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(5),
+                    ExcludeFocusTraversal(
                       child: ValueListenableBuilder<bool>(
                         valueListenable: AdminSession.isAdmin,
                         builder: (context, isAdmin, _) => IconButton(
@@ -467,8 +482,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                         ),
                       ),
                     ),
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(6),
+                    ExcludeFocusTraversal(
                       child: IconButton(
                         icon: const Icon(Icons.refresh),
                         tooltip: 'Refresh library',
