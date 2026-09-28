@@ -40,6 +40,15 @@ class RemoteWsService {
   final ValueNotifier<bool> isPlaying = ValueNotifier(true);
   final ValueNotifier<String?> pairError = ValueNotifier(null);
 
+  /// Ticks (increments) each time a *fresh* pairing completes — i.e. on
+  /// `pair_success`, entering a new code (manually or via QR) — but not on
+  /// `resume_success`, an automatic reconnect using a saved session token.
+  /// [status] alone can't tell those apart (both just become [paired]), but
+  /// the UI needs to: it shows a one-time "linked!" confirmation only for
+  /// the former, since the latter can happen silently any time the app
+  /// resumes from the background.
+  final ValueNotifier<int> freshPairTick = ValueNotifier(0);
+
   /// Set when [connect] fails or times out, so the pairing screen can show
   /// *why* — otherwise a wrong/unreachable host looks identical to a
   /// working one until something is sent.
@@ -156,6 +165,7 @@ class RemoteWsService {
       case 'pair_success':
         pairError.value = null;
         status.value = ConnectionStatus.paired;
+        freshPairTick.value++;
         final token = msg['sessionToken'] as String?;
         if (token != null) _saveToken(token);
       case 'pair_failure':
