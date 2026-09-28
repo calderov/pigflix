@@ -425,6 +425,41 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   }
 
   void _openRemotePairingDialog() {
+    if (RemoteControlService.instance.isPaired.value) {
+      _confirmReplaceExistingPairing();
+      return;
+    }
+    RemoteControlService.instance.requestPairingCode();
+    showDialog(context: context, builder: (_) => const _RemotePairingDialog());
+  }
+
+  /// A remote is already linked — confirm before tearing that down, rather
+  /// than silently generating a new pairing code the connected phone would
+  /// just fail to redeem (the backend refuses a second pairing while one is
+  /// already active).
+  Future<void> _confirmReplaceExistingPairing() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remote already connected'),
+        content: const Text(
+          'A remote control is already linked to Pigflix. Disconnect it '
+          'and pair a new one?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    RemoteControlService.instance.disconnectRemote();
     RemoteControlService.instance.requestPairingCode();
     showDialog(context: context, builder: (_) => const _RemotePairingDialog());
   }

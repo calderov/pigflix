@@ -65,6 +65,20 @@ function handleDisplayMessage(ws, msg) {
     send(ws, { type: 'pairing_code', code: pendingCode.code, expiresAt: pendingCode.expiresAt });
     return;
   }
+  // Lets the display end an existing pairing itself — e.g. the user wants
+  // to link a different phone while one is already connected. Only the
+  // currently-paired remote is told (`unpaired`); the display doesn't need
+  // a reply since it already knows it just did this. Its own reason
+  // (`display_initiated`, distinct from `display_disconnected` below,
+  // which means the *display's own connection* dropped) lets the remote
+  // show the user a "you were disconnected" message rather than silently
+  // treating it like any other dropped-session grace period.
+  if (msg.type === 'disconnect_remote') {
+    send(remoteSocket, { type: 'unpaired', reason: 'display_initiated' });
+    remoteSocket = null;
+    clearSession();
+    return;
+  }
   if (msg.type === 'screen') {
     lastScreenState = {
       screen: msg.screen,

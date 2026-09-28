@@ -49,6 +49,16 @@ class RemoteWsService {
   /// resumes from the background.
   final ValueNotifier<int> freshPairTick = ValueNotifier(0);
 
+  /// Set when the display explicitly disconnects this remote (its "Remote
+  /// already connected" dialog on Pigflix, see `disconnect_remote` in
+  /// backend/src/remoteRelay.js) — as opposed to a transient drop, where
+  /// [status] instead goes to [ConnectionStatus.awaitingCode] so the phone
+  /// can silently resume. The pairing screen shows this once as a dialog,
+  /// then clears it back to null and forgets the saved host, so dismissing
+  /// it lands on the welcome screen rather than silently reconnecting to a
+  /// server that just intentionally ended this session.
+  final ValueNotifier<String?> disconnectNotice = ValueNotifier(null);
+
   /// Set when [connect] fails or times out, so the pairing screen can show
   /// *why* — otherwise a wrong/unreachable host looks identical to a
   /// working one until something is sent.
@@ -215,7 +225,20 @@ class RemoteWsService {
         searchQuery.value = '';
         availableGenres.value = const [];
         selectedGenres.value = const {};
-        status.value = ConnectionStatus.awaitingCode;
+        if (msg['reason'] == 'display_initiated') {
+          disconnectNotice.value =
+              'This device has been disconnected from Pigflix.';
+          status.value = ConnectionStatus.disconnected;
+          // Without this, a resumed app (e.g. the screen turning back on
+          // shortly after this arrives) would have `reconnectNow` silently
+          // reconnect to the same server using the still-remembered
+          // `_backendWsUrl` — undoing the disconnect before the user ever
+          // sees the welcome screen. `connect` clears this flag again on
+          // its own next call, so it only blocks *this* auto-reconnect.
+          _explicitDisconnect = true;
+        } else {
+          status.value = ConnectionStatus.awaitingCode;
+        }
     }
   }
 

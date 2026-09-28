@@ -33,7 +33,38 @@ class _PairingScreenState extends State<PairingScreen> {
   @override
   void initState() {
     super.initState();
-    _loadStoredHost();
+    final notice = RemoteWsService.instance.disconnectNotice.value;
+    if (notice != null) {
+      // The display just intentionally ended this pairing — forget the
+      // saved host (so there's nothing for a normal launch to silently
+      // reconnect to) and show the welcome screen once the user
+      // acknowledges why, rather than the usual "reconnect to last host"
+      // flow below.
+      RemoteWsService.instance.disconnectNotice.value = null;
+      _loadingStoredHost = false;
+      _forgetHostThenNotify(notice);
+    } else {
+      _loadStoredHost();
+    }
+  }
+
+  Future<void> _forgetHostThenNotify(String message) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(hostPrefsKey);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Disconnected'),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadStoredHost() async {
