@@ -15,6 +15,37 @@ const String backendUrl = String.fromEnvironment(
 /// [RemoteControlService]'s connection to the `/ws` relay endpoint.
 String get backendWsUrl => backendUrl.replaceFirst('http', 'ws');
 
+/// [backendUrl] as a bare `host:port` (no scheme), matching the format the
+/// companion app's own "Pigflix server" field expects — shown on the
+/// pairing dialog so a user can type it in directly.
+String get backendHostPort => Uri.parse(backendUrl).authority;
+
+/// A LAN-reachable `host:port` for the backend, as detected by the backend
+/// itself (see `GET /api/config`) and filled in by [loadConfig] at app
+/// startup. Preferred over [backendHostPort] wherever shown to a user:
+/// `backendUrl`'s host is this build's compiled-in default, typically
+/// "localhost" — accurate for the machine running the backend, but useless
+/// on a second device (e.g. the phone running the companion app) trying to
+/// read it off the pairing dialog. Null until `loadConfig` resolves, or if
+/// the backend couldn't find a LAN-facing IPv4 address.
+String? lanServerAddress;
+
+/// Fetches backend-detected display settings that the frontend can't know
+/// on its own — like [lanServerAddress]. Called once at app startup;
+/// deliberately not awaited there, since it only needs to resolve before
+/// the pairing dialog is first opened (a deliberate user action, well
+/// after this trivial request would have completed).
+Future<void> loadConfig() async {
+  try {
+    final res = await http.get(Uri.parse('$backendUrl/api/config'));
+    if (res.statusCode != 200) return;
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    lanServerAddress = data['serverAddress'] as String?;
+  } catch (_) {
+    // Keep it null; callers fall back to backendHostPort.
+  }
+}
+
 /// Strips this build's [backendUrl] back off one of [Movie]'s pre-resolved
 /// poster/backdrop URLs, for sending over [RemoteControlService] instead —
 /// this build's notion of a "full URL" (e.g. `http://localhost:4000`,

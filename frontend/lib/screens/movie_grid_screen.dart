@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/movie.dart';
 import '../services/admin_session.dart';
@@ -424,6 +425,41 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   }
 
   void _openRemotePairingDialog() {
+    if (RemoteControlService.instance.isPaired.value) {
+      _confirmReplaceExistingPairing();
+      return;
+    }
+    RemoteControlService.instance.requestPairingCode();
+    showDialog(context: context, builder: (_) => const _RemotePairingDialog());
+  }
+
+  /// A remote is already linked — confirm before tearing that down, rather
+  /// than silently generating a new pairing code the connected phone would
+  /// just fail to redeem (the backend refuses a second pairing while one is
+  /// already active).
+  Future<void> _confirmReplaceExistingPairing() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remote already connected'),
+        content: const Text(
+          'A remote control is already linked to Pigflix. Disconnect it '
+          'and pair a new one?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    RemoteControlService.instance.disconnectRemote();
     RemoteControlService.instance.requestPairingCode();
     showDialog(context: context, builder: (_) => const _RemotePairingDialog());
   }
@@ -926,6 +962,15 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
   void initState() {
     super.initState();
     RemoteControlService.instance.isPaired.addListener(_onPairedChange);
+    // Pairing can complete before this dialog's first frame renders (e.g.
+    // frame scheduling briefly stalls, or the phone finishes pairing
+    // unusually fast) — in which case isPaired flips true *before* the
+    // listener above is attached, and since a ValueNotifier only notifies
+    // on a change, no event ever arrives for a transition that already
+    // happened, leaving the dialog stuck open forever. Explicitly check
+    // the already-true case once mounted, rather than only reacting to
+    // future changes.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPairedChange());
   }
 
   @override
@@ -946,51 +991,90 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
       title: const Text('Pair remote control'),
       content: SizedBox(
         width: 280,
-        child: ValueListenableBuilder<String?>(
-          valueListenable: RemoteControlService.instance.pairingCode,
-          builder: (context, code, _) {
-            if (code == null) {
-              return const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Generating code…'),
-                ],
-              );
-            }
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  code,
-                  style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 6,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Enter this on the Pigflix Remote app',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                const Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Server: ${lanServerAddress ?? backendHostPort}',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            ValueListenableBuilder<String?>(
+              valueListenable: RemoteControlService.instance.pairingCode,
+              builder: (context, code, _) {
+                if (code == null) {
+                  return const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Generating code…'),
+                    ],
+                  );
+                }
+                final address = lanServerAddress ?? backendHostPort;
+                final qrData = Uri(
+                  scheme: 'pigflix',
+                  host: 'pair',
+                  queryParameters: {'host': address, 'code': code},
+                ).toString();
+                return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: QrImageView(
+                        data: qrData,
+                        size: 180,
+                        padding: EdgeInsets.zero,
+                      ),
                     ),
-                    SizedBox(width: 12),
-                    Text('Waiting for phone…'),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Scan with the Pigflix Remote app',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      code,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Or enter this code manually',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 20),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Waiting for phone…'),
+                      ],
+                    ),
                   ],
-                ),
-              ],
-            );
-          },
+                );
+              },
+            ),
+          ],
         ),
       ),
       actions: [

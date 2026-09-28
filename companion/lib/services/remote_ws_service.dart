@@ -11,6 +11,17 @@ enum ConnectionStatus { disconnected, connecting, awaitingCode, paired }
 
 const _sessionTokenPrefsKey = 'remote_session_token';
 
+/// Shown on the welcome screen (see [RemoteWsService.welcomeNotice]) any
+/// time a previously-paired session turns out to be over without a clear,
+/// user-facing reason of its own (a failed resume, the display's own
+/// connection having dropped) — as opposed to [RemoteWsService
+/// .disconnectNotice]'s dialog, which is for the one case that *does* have
+/// a specific reason to show (the user tapped "Disconnect" on Pigflix's
+/// "Remote already connected" dialog).
+const _sessionEndedMessage =
+    'Your previous session ended. Reconnect below using a QR code or '
+    'manual setup.';
+
 /// The companion app's single WebSocket connection to the Pigflix backend's
 /// `/ws?role=remote` relay endpoint. Mirrors the shape of the web
 /// frontend's `RemoteControlService` (see `frontend/lib/services/
@@ -39,6 +50,35 @@ class RemoteWsService {
   final ValueNotifier<Set<String>> selectedGenres = ValueNotifier(const {});
   final ValueNotifier<bool> isPlaying = ValueNotifier(true);
   final ValueNotifier<String?> pairError = ValueNotifier(null);
+
+  /// Ticks (increments) each time a *fresh* pairing completes — i.e. on
+  /// `pair_success`, entering a new code (manually or via QR) — but not on
+  /// `resume_success`, an automatic reconnect using a saved session token.
+  /// [status] alone can't tell those apart (both just become [paired]), but
+  /// the UI needs to: it shows a one-time "linked!" confirmation only for
+  /// the former, since the latter can happen silently any time the app
+  /// resumes from the background.
+  final ValueNotifier<int> freshPairTick = ValueNotifier(0);
+
+  /// Set when the display explicitly disconnects this remote (its "Remote
+  /// already connected" dialog on Pigflix, see `disconnect_remote` in
+  /// backend/src/remoteRelay.js) — as opposed to a transient drop, where
+  /// [status] instead goes to [ConnectionStatus.awaitingCode] so the phone
+  /// can silently resume. The pairing screen shows this once as a dialog,
+  /// then clears it back to null and forgets the saved host, so dismissing
+  /// it lands on the welcome screen rather than silently reconnecting to a
+  /// server that just intentionally ended this session.
+  final ValueNotifier<String?> disconnectNotice = ValueNotifier(null);
+
+  /// Set when a saved session fails to resume (`resume_failure` — the
+  /// backend was restarted, the grace period elapsed, etc.), so the
+  /// welcome screen can explain why the user landed there instead of
+  /// straight back on the remote screen. Unlike [disconnectNotice] (a
+  /// one-shot dialog), this is a persistent inline message on the welcome
+  /// screen itself — cleared the next time a connection attempt starts
+  /// (see [connect]), whether that's this same notice's "reconnect below"
+  /// or an unrelated pairing attempt later.
+  final ValueNotifier<String?> welcomeNotice = ValueNotifier(null);
 
   /// Set when [connect] fails or times out, so the pairing screen can show
   /// *why* — otherwise a wrong/unreachable host looks identical to a
@@ -70,6 +110,7 @@ class RemoteWsService {
     status.value = ConnectionStatus.connecting;
     connectError.value = null;
     pairError.value = null;
+    welcomeNotice.value = null;
 
     _sessionToken ??= await _loadStoredToken();
 
@@ -139,10 +180,18 @@ class RemoteWsService {
   }
 
   /// Closes the current connection, e.g. when the user wants to point the
-  /// app at a different backend host — unlike an unexpected drop, this
-  /// does not auto-reconnect, and forgets the saved session since it no
-  /// longer applies to whatever host comes next.
+  /// app at a different backend host, or hits "Disconnect" on the remote
+  /// screen — unlike an unexpected drop, this does not auto-reconnect, and
+  /// forgets the saved session since it no longer applies to whatever host
+  /// comes next.
   void disconnect() {
+    // Tells the display this is intentional, so it stops treating this
+    // remote as paired immediately rather than only after the backend's
+    // grace-period window elapses (see `remote_disconnect` in
+    // backend/src/remoteRelay.js) — a no-op if this connection was never
+    // actually the paired remote (e.g. cancelling from the code-entry
+    // screen), same as any other message sent while unpaired.
+    _send({'type': 'remote_disconnect'});
     _explicitDisconnect = true;
     _reconnectTimer?.cancel();
     _channel?.sink.close();
@@ -156,6 +205,7 @@ class RemoteWsService {
       case 'pair_success':
         pairError.value = null;
         status.value = ConnectionStatus.paired;
+        freshPairTick.value++;
         final token = msg['sessionToken'] as String?;
         if (token != null) _saveToken(token);
       case 'pair_failure':
@@ -165,8 +215,18 @@ class RemoteWsService {
         status.value = ConnectionStatus.paired;
       case 'resume_failure':
         _clearStoredToken();
-        pairError.value = 'session_ended';
-        status.value = ConnectionStatus.awaitingCode;
+        welcomeNotice.value = _sessionEndedMessage;
+        status.value = ConnectionStatus.disconnected;
+        // Same reasoning as the `display_initiated` branch above: without
+        // this, a subsequent `reconnectNow`/`_scheduleReconnect` call (the
+        // underlying socket is still open at this point — only the resume
+        // attempt itself failed — so neither is a given, but an app
+        // resume shortly after would trigger one) would immediately fire
+        // another `connect`, which — finding no token left to resume with
+        // — lands straight on `awaitingCode` ("Enter code"), skipping the
+        // welcome screen and silently discarding the message above before
+        // the user ever sees it.
+        _explicitDisconnect = true;
       case 'screen':
         currentScreen.value = msg['screen'] as String?;
         movieInfo.value = MovieInfo(
@@ -205,7 +265,29 @@ class RemoteWsService {
         searchQuery.value = '';
         availableGenres.value = const [];
         selectedGenres.value = const {};
-        status.value = ConnectionStatus.awaitingCode;
+        if (msg['reason'] == 'display_initiated') {
+          // The user tapped "Disconnect" on Pigflix's "Remote already
+          // connected" dialog — a dedicated, one-shot dialog explaining
+          // that specifically.
+          disconnectNotice.value =
+              'This device has been disconnected from Pigflix.';
+        } else {
+          // Any other reason (currently just `display_disconnected` — the
+          // display's own connection dropped, e.g. its browser tab was
+          // closed, while this phone stayed connected) is just as much a
+          // "this session is over" event from the phone's point of view,
+          // even though it isn't a `resume_failure`: no resume was even
+          // attempted, since the phone's own connection never dropped.
+          welcomeNotice.value = _sessionEndedMessage;
+        }
+        status.value = ConnectionStatus.disconnected;
+        // Without this, a resumed app (e.g. the screen turning back on
+        // shortly after this arrives) would have `reconnectNow` silently
+        // reconnect to the same server using the still-remembered
+        // `_backendWsUrl` — undoing the disconnect before the user ever
+        // sees the welcome screen. `connect` clears this flag again on
+        // its own next call, so it only blocks *this* auto-reconnect.
+        _explicitDisconnect = true;
     }
   }
 

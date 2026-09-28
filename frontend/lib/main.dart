@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'screens/movie_grid_screen.dart';
+import 'services/api_service.dart';
 import 'services/remote_control_service.dart';
 import 'services/route_observer.dart';
 
 void main() {
   RemoteControlService.instance.connect();
+  loadConfig();
   runApp(const PigflixApp());
 }
 

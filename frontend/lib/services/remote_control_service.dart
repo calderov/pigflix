@@ -85,6 +85,18 @@ class RemoteControlService {
     _send({'type': 'request_pairing_code'});
   }
 
+  /// Ends the current pairing from this side — e.g. the user wants to link
+  /// a different phone while one is already connected. Updates local state
+  /// immediately rather than waiting on a round-trip: the backend only
+  /// notifies the *remote* end of a display-initiated disconnect (mirroring
+  /// every other teardown path), since the display already knows it just
+  /// did this.
+  void disconnectRemote() {
+    _send({'type': 'disconnect_remote'});
+    isPaired.value = false;
+    pairingCode.value = null;
+  }
+
   void sendScreenState(
     String screen, {
     String? movieTitle,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/movie_info.dart';
 import '../services/remote_ws_service.dart';
@@ -8,6 +9,7 @@ import '../widgets/movie_detail_info.dart';
 import '../widgets/pigflix_logo.dart';
 import '../widgets/playback_controls.dart';
 import 'genre_filter_screen.dart';
+import 'pairing_screen.dart' show hostPrefsKey;
 
 /// The remote-control screen shown once paired. Its button layout adapts to
 /// whichever screen the web frontend is currently showing, per the
@@ -121,6 +123,41 @@ class RemoteScreen extends StatelessWidget {
     );
   }
 
+  /// Unlike "Change server" on the pairing screen (which keeps the saved
+  /// host around so its field stays pre-filled for a quick retry), this is
+  /// a deliberate full unlink — so it also forgets the saved host, not just
+  /// the session token ([RemoteWsService.disconnect] already clears that).
+  /// Otherwise the fresh [PairingScreen] this drops back to would find that
+  /// leftover host in its own `initState` and silently reconnect right
+  /// back, instead of actually landing on the welcome screen.
+  Future<void> _confirmDisconnect(BuildContext context) async {
+    tapHaptic();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Disconnect'),
+        content: const Text(
+          'Are you sure you want to disconnect from Pigflix?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    tapHaptic();
+    RemoteWsService.instance.disconnect();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(hostPrefsKey);
+  }
+
   Widget _backButton() {
     return SizedBox(
       width: double.infinity,
@@ -188,6 +225,30 @@ class RemoteScreen extends StatelessWidget {
     );
   }
 
+  /// Top-right "Disconnect" button, shown alongside [_gridLogo] only on the
+  /// grid (d-pad) layout.
+  Widget _gridDisconnectButton(BuildContext context) {
+    return ValueListenableBuilder<String?>(
+      valueListenable: RemoteWsService.instance.currentScreen,
+      builder: (context, screen, _) {
+        if (screen != 'grid') return const SizedBox.shrink();
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Align(
+              alignment: Alignment.topRight,
+              child: IconButton.outlined(
+                onPressed: () => _confirmDisconnect(context),
+                icon: const Icon(Icons.link_off),
+                tooltip: 'Disconnect',
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -195,7 +256,6 @@ class RemoteScreen extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           _movieBackdrop(),
-          _gridLogo(),
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -377,6 +437,8 @@ class RemoteScreen extends StatelessWidget {
               },
             ),
           ),
+          _gridLogo(),
+          _gridDisconnectButton(context),
         ],
       ),
     );
