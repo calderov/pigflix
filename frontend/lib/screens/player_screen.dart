@@ -583,7 +583,7 @@ class _SubtitleOverlay extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0x96000000),
+                  color: Colors.black.withAlpha(100),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text.rich(
