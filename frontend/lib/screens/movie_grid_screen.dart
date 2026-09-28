@@ -927,6 +927,15 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
   void initState() {
     super.initState();
     RemoteControlService.instance.isPaired.addListener(_onPairedChange);
+    // Pairing can complete before this dialog's first frame renders (e.g.
+    // frame scheduling briefly stalls, or the phone finishes pairing
+    // unusually fast) — in which case isPaired flips true *before* the
+    // listener above is attached, and since a ValueNotifier only notifies
+    // on a change, no event ever arrives for a transition that already
+    // happened, leaving the dialog stuck open forever. Explicitly check
+    // the already-true case once mounted, rather than only reacting to
+    // future changes.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPairedChange());
   }
 
   @override

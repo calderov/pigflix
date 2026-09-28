@@ -6,7 +6,7 @@ import '../utils/haptics.dart';
 import '../widgets/pigflix_logo.dart';
 import 'qr_scan_screen.dart';
 
-const _hostPrefsKey = 'backend_host';
+const hostPrefsKey = 'backend_host';
 
 Map<String, String> _pairErrorMessages = const {
   'invalid_code': 'Incorrect code',
@@ -38,7 +38,7 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Future<void> _loadStoredHost() async {
     final prefs = await SharedPreferences.getInstance();
-    final host = prefs.getString(_hostPrefsKey);
+    final host = prefs.getString(hostPrefsKey);
     if (!mounted) return;
     setState(() => _loadingStoredHost = false);
     if (host != null && host.isNotEmpty) {
@@ -49,7 +49,7 @@ class _PairingScreenState extends State<PairingScreen> {
 
   Future<void> _connect(String host) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_hostPrefsKey, host);
+    await prefs.setString(hostPrefsKey, host);
     await RemoteWsService.instance.connect('ws://$host');
   }
 
@@ -254,7 +254,7 @@ class _HostForm extends StatelessWidget {
           controller: controller,
           decoration: const InputDecoration(
             labelText: 'Pigflix server',
-            hintText: '192.168.1.50:4000',
+            hintText: '192.168.XX.XX:4000',
             border: OutlineInputBorder(),
           ),
           keyboardType: TextInputType.url,
