@@ -158,10 +158,18 @@ class RemoteWsService {
   }
 
   /// Closes the current connection, e.g. when the user wants to point the
-  /// app at a different backend host — unlike an unexpected drop, this
-  /// does not auto-reconnect, and forgets the saved session since it no
-  /// longer applies to whatever host comes next.
+  /// app at a different backend host, or hits "Disconnect" on the remote
+  /// screen — unlike an unexpected drop, this does not auto-reconnect, and
+  /// forgets the saved session since it no longer applies to whatever host
+  /// comes next.
   void disconnect() {
+    // Tells the display this is intentional, so it stops treating this
+    // remote as paired immediately rather than only after the backend's
+    // grace-period window elapses (see `remote_disconnect` in
+    // backend/src/remoteRelay.js) — a no-op if this connection was never
+    // actually the paired remote (e.g. cancelling from the code-entry
+    // screen), same as any other message sent while unpaired.
+    _send({'type': 'remote_disconnect'});
     _explicitDisconnect = true;
     _reconnectTimer?.cancel();
     _channel?.sink.close();

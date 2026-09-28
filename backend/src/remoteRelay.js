@@ -171,6 +171,17 @@ function handleRemoteMessage(ws, msg) {
     send(displaySocket, { type: 'search_query', query: msg.query });
   } else if (msg.type === 'genre_filter') {
     send(displaySocket, { type: 'genre_filter', genres: msg.genres });
+  } else if (msg.type === 'remote_disconnect') {
+    // The user tapped "Disconnect" on the companion app itself — tell the
+    // display right away rather than leaving it to assume this remote is
+    // still paired for the rest of the grace-period window (see
+    // `handleRemoteDisconnect`, which otherwise wouldn't notify it for up
+    // to `SESSION_RESUME_TTL_MINUTES`). Clearing `remoteSocket`/the session
+    // here also means the `close` event this remote's socket is about to
+    // fire (see `attachRemoteRelay` below) won't redundantly repeat this.
+    send(displaySocket, { type: 'unpaired', reason: 'remote_disconnected' });
+    remoteSocket = null;
+    clearSession();
   }
 }
 
