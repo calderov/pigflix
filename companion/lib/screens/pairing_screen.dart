@@ -12,7 +12,6 @@ Map<String, String> _pairErrorMessages = const {
   'invalid_code': 'Incorrect code',
   'expired': 'Code expired, generate a new one on Pigflix',
   'already_paired': 'A remote is already connected',
-  'session_ended': 'Previous session ended — enter a new code',
 };
 
 class PairingScreen extends StatefulWidget {
@@ -33,6 +32,7 @@ class _PairingScreenState extends State<PairingScreen> {
   @override
   void initState() {
     super.initState();
+    RemoteWsService.instance.welcomeNotice.addListener(_onWelcomeNotice);
     final notice = RemoteWsService.instance.disconnectNotice.value;
     if (notice != null) {
       // The display just intentionally ended this pairing — forget the
@@ -43,9 +43,46 @@ class _PairingScreenState extends State<PairingScreen> {
       RemoteWsService.instance.disconnectNotice.value = null;
       _loadingStoredHost = false;
       _forgetHostThenNotify(notice);
+    } else if (RemoteWsService.instance.welcomeNotice.value != null) {
+      // Same idea, for a [welcomeNotice] that's already set by the time
+      // this screen (re)mounts — e.g. the display's own connection just
+      // dropped while this phone was still on the remote screen, which
+      // sets it *before* any PairingScreen exists to hear about it via
+      // the listener registered above (that only catches a notice that
+      // shows up *while* this screen is already mounted, e.g.
+      // `resume_failure` during `_loadStoredHost`'s own connect attempt
+      // below). `_WelcomeForm` already reads the notice live, so nothing
+      // further is needed to display it — just skip the auto-reconnect
+      // this branch would otherwise trigger and forget the host, exactly
+      // like the listener does for the "already mounted" case.
+      _loadingStoredHost = false;
+      _onWelcomeNotice();
     } else {
       _loadStoredHost();
     }
+  }
+
+  @override
+  void dispose() {
+    RemoteWsService.instance.welcomeNotice.removeListener(_onWelcomeNotice);
+    _hostController.dispose();
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  /// Mirrors why [disconnectNotice] forgets the host: a [welcomeNotice]
+  /// appearing (currently only on `resume_failure`) means whatever host
+  /// was saved just failed to resume, so a *later* app launch's
+  /// [_loadStoredHost] should land on the welcome screen too, rather than
+  /// silently reconnecting to the same server and — finding no session
+  /// left to resume — dropping straight onto "Enter code" instead.
+  /// [welcomeNotice] can be set mid-session (this screen is already
+  /// mounted, having gotten here via [_loadStoredHost]'s own auto-connect
+  /// attempt), so unlike [disconnectNotice] this needs an ongoing
+  /// listener, not just a one-time check in [initState].
+  void _onWelcomeNotice() {
+    if (RemoteWsService.instance.welcomeNotice.value == null) return;
+    SharedPreferences.getInstance().then((prefs) => prefs.remove(hostPrefsKey));
   }
 
   Future<void> _forgetHostThenNotify(String message) async {
@@ -114,13 +151,6 @@ class _PairingScreenState extends State<PairingScreen> {
     tapHaptic();
     RemoteWsService.instance.disconnect();
     setState(() => _mode = _PairingMode.welcome);
-  }
-
-  @override
-  void dispose() {
-    _hostController.dispose();
-    _codeController.dispose();
-    super.dispose();
   }
 
   @override
@@ -235,6 +265,20 @@ class _WelcomeForm extends StatelessWidget {
         const Text(
           'How would you like to pair with Pigflix?',
           textAlign: TextAlign.center,
+        ),
+        ValueListenableBuilder<String?>(
+          valueListenable: RemoteWsService.instance.welcomeNotice,
+          builder: (context, notice, _) {
+            if (notice == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                notice,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.orangeAccent),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 24),
         SizedBox(
