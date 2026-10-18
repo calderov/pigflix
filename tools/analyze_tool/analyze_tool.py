@@ -103,10 +103,11 @@ def analyze_and_report(movies):
         else:
             missing_video.append(movie_details["name"])
 
-    print("\nNo video files found for the following movies:")
-    for movie in missing_video:
-        print(f" {movie}")
-    
+    if missing_video:
+        print("\nNo video files found for the following movies:")
+        for movie in missing_video:
+            print(f" {movie}")
+
 def main():
     if len(sys.argv) < 2:
         print("No path provided...")
