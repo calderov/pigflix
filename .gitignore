@@ -1,3 +1,8 @@
 tools/encoding_tool/pending/*
 tools/encoding_tool/in_progress/*
 tools/encoding_tool/done/*
+tools/encoding_tool/__pycache__
+tools/subtitles_tool/pending/*
+tools/subtitles_tool/in_progress/*
+tools/subtitles_tool/done/*
+tools/subtitles_tool/__pycache__
