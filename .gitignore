@@ -6,3 +6,5 @@ tools/subtitles_tool/pending/*
 tools/subtitles_tool/in_progress/*
 tools/subtitles_tool/done/*
 tools/subtitles_tool/__pycache__
+tools/subtitles_tool/.env
+tools/subtitles_tool/.venv

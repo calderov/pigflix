@@ -6,6 +6,7 @@ import time
 import base64
 import zipfile
 import shutil
+import subprocess
 from datetime import datetime
 
 import requests
@@ -15,7 +16,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PENDING_DIR = os.path.join(SCRIPT_DIR, "pending")
 IN_PROGRESS_DIR = os.path.join(SCRIPT_DIR, "in_progress")
 DONE_DIR = os.path.join(SCRIPT_DIR, "done")
-ENV_FILE_PATH = os.path.join(SCRIPT_DIR, "..", "..", "backend", ".env")
+ENV_FILE_PATH = os.path.join(SCRIPT_DIR, ".env")
+TRANSLATE_SCRIPT_PATH = os.path.join(SCRIPT_DIR, "translate_subs.py")
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".wmv"}
 
@@ -50,19 +52,23 @@ def parse_title_and_year(filename):
     return (cleaned or base), year
 
 
-def get_tmdb_api_key():
-    key = os.environ.get("TMDB_API_KEY")
-    if key:
-        return key
+def get_env_value(name):
+    value = os.environ.get(name)
+    if value:
+        return value
     if os.path.exists(ENV_FILE_PATH):
         with open(ENV_FILE_PATH) as f:
             for line in f:
                 line = line.strip()
-                if line.startswith("TMDB_API_KEY="):
-                    value = line.split("=", 1)[1].strip()
-                    if value:
-                        return value
+                if line.startswith(f"{name}="):
+                    v = line.split("=", 1)[1].strip()
+                    if v:
+                        return v
     return None
+
+
+def get_tmdb_api_key():
+    return get_env_value("TMDB_API_KEY")
 
 
 def tmdb_search_movie(title, year, api_key):
@@ -187,12 +193,36 @@ def ensure_subtitle(movie_dir, video_stem, lang_code, lang_name, imdb_id, movie_
     return [f"{lang_name}: FETCHED from {detail_url} (imdb_id={imdb_id}) -> {os.path.basename(srt_path)}"]
 
 
+def translate_missing_subtitle(movie_dir, video_stem, source_code, source_name,
+                                target_code, target_name, openai_api_key):
+    if not openai_api_key:
+        return [f"{target_name}: MISSING, not fetched and OPENAI_API_KEY not set, cannot translate from {source_name}"]
+
+    source_path = os.path.join(movie_dir, f"{video_stem}.{source_code}.srt")
+    target_path = os.path.join(movie_dir, f"{video_stem}.{target_code}.srt")
+
+    try:
+        result = subprocess.run(
+            [sys.executable, TRANSLATE_SCRIPT_PATH, source_path, target_path,
+             "--source", source_name, "--target", target_name],
+            capture_output=True, text=True, timeout=1200,
+        )
+    except subprocess.TimeoutExpired:
+        return [f"{target_name}: MISSING, translation from {source_name} timed out"]
+
+    if result.returncode != 0:
+        tail = "\n".join((result.stderr or result.stdout or "").strip().splitlines()[-20:])
+        return [f"{target_name}: MISSING, translation from {source_name} failed:\n  {tail}"]
+
+    return [f"{target_name}: TRANSLATED from {source_name} via translate_subs.py -> {os.path.basename(target_path)}"]
+
+
 def write_summary_log(movie_dir, lines):
     with open(os.path.join(movie_dir, "summary.log"), "a") as f:
         f.write("\n".join(lines) + "\n")
 
 
-def process_movie(movie_dir, position, total, api_key):
+def process_movie(movie_dir, position, total, api_key, openai_api_key):
     name = os.path.basename(movie_dir)
     prefix = f"[{position}/{total}] {name}:"
 
@@ -230,6 +260,17 @@ def process_movie(movie_dir, position, total, api_key):
         log_lines.extend(result)
         print(f"{prefix} {result[0]}")
 
+    still_missing = [c for c, _ in LANGUAGES if not os.path.exists(os.path.join(movie_dir, f"{video_stem}.{c}.srt"))]
+    if len(still_missing) == 1:
+        missing_code = still_missing[0]
+        present_code, present_name = next((c, n) for c, n in LANGUAGES if c != missing_code)
+        missing_name = next(n for c, n in LANGUAGES if c == missing_code)
+        print(f"{prefix} {missing_name} missing, translating from {present_name}...")
+        result = translate_missing_subtitle(movie_dir, video_stem, present_code, present_name,
+                                             missing_code, missing_name, openai_api_key)
+        log_lines.extend(result)
+        print(f"{prefix} {result[0]}")
+
     write_summary_log(movie_dir, log_lines)
     shutil.move(movie_dir, os.path.join(DONE_DIR, name))
     print(f"{prefix} finished, moved to done/")
@@ -241,6 +282,12 @@ def main():
         print("Error: TMDB_API_KEY is not set (checked environment and backend/.env).")
         print("This tool cannot look up IMDb ids without it.")
         sys.exit(1)
+
+    openai_api_key = get_env_value("OPENAI_API_KEY")
+    if openai_api_key:
+        os.environ["OPENAI_API_KEY"] = openai_api_key
+    else:
+        print("Note: OPENAI_API_KEY not set — missing subtitles won't be auto-translated as a fallback.")
 
     os.makedirs(PENDING_DIR, exist_ok=True)
     os.makedirs(IN_PROGRESS_DIR, exist_ok=True)
@@ -255,14 +302,14 @@ def main():
 
     total_in_progress = len(in_progress_names)
     for position, name in enumerate(in_progress_names, start=1):
-        process_movie(os.path.join(IN_PROGRESS_DIR, name), position, total_in_progress, api_key)
+        process_movie(os.path.join(IN_PROGRESS_DIR, name), position, total_in_progress, api_key, openai_api_key)
 
     total_pending = len(pending_names)
     for position, name in enumerate(pending_names, start=1):
         src = os.path.join(PENDING_DIR, name)
         dest = os.path.join(IN_PROGRESS_DIR, name)
         shutil.move(src, dest)
-        process_movie(dest, position, total_pending, api_key)
+        process_movie(dest, position, total_pending, api_key, openai_api_key)
 
     print(f"Queue empty. {total_pending} movie(s) from pending/ processed this run.")
 
