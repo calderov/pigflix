@@ -225,6 +225,15 @@ def parse_translated_response(text, expected_numbers):
 # Main translation process
 # ---------------------------------------------------------------------------
 
+def read_text_any_encoding(path):
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            return path.read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return path.read_text(encoding="latin-1")
+
+
 def translate_srt(
     input_file,
     output_file,
@@ -241,7 +250,7 @@ def translate_srt(
 
     print(f"Reading: {input_path}")
 
-    text = input_path.read_text(encoding="utf-8-sig")
+    text = read_text_any_encoding(input_path)
 
     entries = parse_srt(text)
 
