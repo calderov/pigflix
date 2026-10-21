@@ -8,3 +8,8 @@ tools/subtitles_tool/done/*
 tools/subtitles_tool/__pycache__
 tools/subtitles_tool/.env
 tools/subtitles_tool/.venv
+tools/subtitle_sync_tool/pending/*
+tools/subtitle_sync_tool/in_progress/*
+tools/subtitle_sync_tool/done/*
+tools/subtitle_sync_tool/__pycache__
+tools/subtitle_sync_tool/.venv
