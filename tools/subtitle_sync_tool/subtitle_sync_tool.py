@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 import sys
@@ -51,7 +52,7 @@ def ffs_executable():
     return os.path.join(os.path.dirname(sys.executable), "ffs")
 
 
-def check_and_sync_subtitle(movie_dir, video_path, srt_filename):
+def check_and_sync_subtitle(movie_dir, video_path, srt_filename, auto_yes=False):
     srt_path = os.path.join(movie_dir, srt_filename)
     stem, ext = os.path.splitext(srt_path)
     tmp_path = f"{stem}.synced{ext}"
@@ -77,7 +78,10 @@ def check_and_sync_subtitle(movie_dir, video_path, srt_filename):
         os.remove(tmp_path)
         return [f"{srt_filename}: already in sync"]
 
-    answer = input(f"  '{srt_filename}' looks out of sync (~{shift:.1f}s). Attempt auto-sync? [y/N]: ").strip().lower()
+    if auto_yes:
+        answer = "y"
+    else:
+        answer = input(f"  '{srt_filename}' looks out of sync (~{shift:.1f}s). Attempt auto-sync? [y/N]: ").strip().lower()
     if answer != "y":
         os.remove(tmp_path)
         return [f"{srt_filename}: out of sync, user declined auto-sync, left unchanged"]
@@ -93,7 +97,7 @@ def write_summary_log(movie_dir, lines):
         f.write("\n".join(lines) + "\n")
 
 
-def process_movie(movie_dir, position, total):
+def process_movie(movie_dir, position, total, auto_yes=False):
     name = os.path.basename(movie_dir)
     prefix = f"[{position}/{total}] {name}:"
 
@@ -111,7 +115,7 @@ def process_movie(movie_dir, position, total):
     else:
         print(f"{prefix} checking {len(srt_files)} subtitle file(s)...")
         for srt_filename in srt_files:
-            result = check_and_sync_subtitle(movie_dir, video_path, srt_filename)
+            result = check_and_sync_subtitle(movie_dir, video_path, srt_filename, auto_yes=auto_yes)
             log_lines.extend(result)
             print(f"{prefix} {result[0]}")
 
@@ -121,6 +125,16 @@ def process_movie(movie_dir, position, total):
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Check and sync subtitle files for movies in pending/."
+    )
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Don't ask for confirmation before syncing an out-of-sync subtitle; proceed automatically.",
+    )
+    args = parser.parse_args()
+
     os.makedirs(PENDING_DIR, exist_ok=True)
     os.makedirs(IN_PROGRESS_DIR, exist_ok=True)
     os.makedirs(DONE_DIR, exist_ok=True)
@@ -134,14 +148,14 @@ def main():
 
     total_in_progress = len(in_progress_names)
     for position, name in enumerate(in_progress_names, start=1):
-        process_movie(os.path.join(IN_PROGRESS_DIR, name), position, total_in_progress)
+        process_movie(os.path.join(IN_PROGRESS_DIR, name), position, total_in_progress, auto_yes=args.yes)
 
     total_pending = len(pending_names)
     for position, name in enumerate(pending_names, start=1):
         src = os.path.join(PENDING_DIR, name)
         dest = os.path.join(IN_PROGRESS_DIR, name)
         shutil.move(src, dest)
-        process_movie(dest, position, total_pending)
+        process_movie(dest, position, total_pending, auto_yes=args.yes)
 
     print(f"Queue empty. {total_pending} movie(s) from pending/ processed this run.")
 
