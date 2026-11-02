@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gio/gio.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -19,9 +20,33 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+// Makes the window decoration (header bar/title bar) follow the desktop's
+// dark-mode preference, read from the freedesktop "color-scheme" setting
+// (org.gnome.desktop.interface), which GNOME/Pantheon/elementary/budgie etc.
+// expose but plain GTK3 doesn't poll on its own. No-op if that schema isn't
+// installed, so it stays harmless on window managers that don't have it.
+static void apply_dark_theme_preference() {
+  GSettingsSchemaSource* source = g_settings_schema_source_get_default();
+  if (source == nullptr) {
+    return;
+  }
+  g_autoptr(GSettingsSchema) schema = g_settings_schema_source_lookup(
+      source, "org.gnome.desktop.interface", TRUE);
+  if (schema == nullptr) {
+    return;
+  }
+  g_autoptr(GSettings) settings = g_settings_new("org.gnome.desktop.interface");
+  g_autofree gchar* color_scheme = g_settings_get_string(settings, "color-scheme");
+  gboolean prefer_dark = color_scheme != nullptr &&
+                         g_strcmp0(color_scheme, "prefer-dark") == 0;
+  g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
+              prefer_dark, nullptr);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  apply_dark_theme_preference();
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -45,11 +70,11 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "frontend");
+    gtk_header_bar_set_title(header_bar, "Pigflix");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "frontend");
+    gtk_window_set_title(window, "Pigflix");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
