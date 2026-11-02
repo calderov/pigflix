@@ -8,7 +8,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../models/movie.dart';
 import '../services/admin_session.dart';
 import '../services/api_service.dart';
-import '../services/fullscreen/fullscreen_control.dart' as fullscreen;
 import '../services/remote_control_service.dart';
 import '../services/route_observer.dart';
 import '../widgets/poster_placeholder.dart';
@@ -541,13 +540,6 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                     // search field/filter button/grid, which stay in the
                     // Tab loop) — still reachable by mouse/touch, and by
                     // the "S"/"F" key shortcuts above for search/filter.
-                    ExcludeFocusTraversal(
-                      child: IconButton(
-                        icon: const Icon(Icons.fullscreen),
-                        tooltip: 'Toggle fullscreen',
-                        onPressed: fullscreen.toggleFullscreen,
-                      ),
-                    ),
                     ExcludeFocusTraversal(
                       child: IconButton(
                         icon: const Icon(Icons.settings_remote),
