@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:html' as html;
 
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:web/web.dart' as web;
 
 import '../models/movie.dart';
 import '../services/api_service.dart';
@@ -154,7 +154,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _requestBrowserFullscreen() {
     try {
-      html.document.documentElement?.requestFullscreen();
+      web.document.documentElement?.requestFullscreen();
     } catch (_) {
       // Fullscreen requires a user gesture in some browsers; ignore if denied.
     }
@@ -162,10 +162,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _toggleFullscreen() {
     try {
-      if (html.document.fullscreenElement != null) {
-        html.document.exitFullscreen();
+      if (web.document.fullscreenElement != null) {
+        web.document.exitFullscreen();
       } else {
-        html.document.documentElement?.requestFullscreen();
+        web.document.documentElement?.requestFullscreen();
       }
     } catch (_) {
       // Fullscreen requires a user gesture in some browsers; ignore if denied.
@@ -282,8 +282,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _statusPoll?.cancel();
     _hideBackButtonTimer?.cancel();
     try {
-      if (html.document.fullscreenElement != null) {
-        html.document.exitFullscreen();
+      if (web.document.fullscreenElement != null) {
+        web.document.exitFullscreen();
       }
     } catch (_) {}
     _videoController?.removeListener(_onVideoValueChanged);
