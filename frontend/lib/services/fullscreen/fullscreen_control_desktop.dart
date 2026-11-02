@@ -5,6 +5,11 @@ import 'package:window_manager/window_manager.dart';
 bool get _isSupportedDesktop =>
     Platform.isLinux || Platform.isMacOS || Platform.isWindows;
 
+Future<bool> isFullscreenActive() async {
+  if (!_isSupportedDesktop) return false;
+  return windowManager.isFullScreen();
+}
+
 void requestFullscreen() {
   if (!_isSupportedDesktop) return;
   windowManager.setFullScreen(true);

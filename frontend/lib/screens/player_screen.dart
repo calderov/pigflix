@@ -37,6 +37,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   StreamSubscription<Map<String, dynamic>>? _remoteSub;
   bool? _lastBroadcastIsPlaying;
 
+  // Whether fullscreen was already active (e.g. the user turned it on for
+  // the whole app) before this screen requested it — if so, `dispose`
+  // leaves it on instead of exiting, so fullscreen persists across screens.
+  bool _wasFullscreenBeforePlayer = false;
+
   @override
   void initState() {
     super.initState();
@@ -152,7 +157,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     Navigator.of(context).pop();
   }
 
-  void _requestBrowserFullscreen() {
+  void _requestBrowserFullscreen() async {
+    try {
+      _wasFullscreenBeforePlayer = await fullscreen.isFullscreenActive();
+    } catch (_) {
+      // Default to false: if we can't tell, treat it as this screen's own
+      // fullscreen request, so dispose still cleans it up as before.
+    }
     try {
       fullscreen.requestFullscreen();
     } catch (_) {
@@ -277,9 +288,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _remoteSub?.cancel();
     _statusPoll?.cancel();
     _hideBackButtonTimer?.cancel();
-    try {
-      fullscreen.exitFullscreenIfActive();
-    } catch (_) {}
+    if (!_wasFullscreenBeforePlayer) {
+      try {
+        fullscreen.exitFullscreenIfActive();
+      } catch (_) {}
+    }
     _videoController?.removeListener(_onVideoValueChanged);
     _chewieController?.dispose();
     _videoController?.dispose();

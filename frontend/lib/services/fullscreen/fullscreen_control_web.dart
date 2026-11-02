@@ -1,5 +1,7 @@
 import 'package:web/web.dart' as web;
 
+Future<bool> isFullscreenActive() async => web.document.fullscreenElement != null;
+
 void requestFullscreen() {
   web.document.documentElement?.requestFullscreen();
 }
