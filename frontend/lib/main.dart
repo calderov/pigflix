@@ -1,11 +1,27 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:video_player_media_kit/video_player_media_kit.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'screens/movie_grid_screen.dart';
 import 'services/api_service.dart';
 import 'services/remote_control_service.dart';
 import 'services/route_observer.dart';
 
-void main() {
+/// Guards every desktop-only call below — `Platform.*` is never evaluated
+/// on web thanks to `&&` short-circuiting, since `dart:io` only compiles
+/// for web as a stub that throws if actually touched.
+bool get _isDesktop =>
+    !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (_isDesktop) {
+    await windowManager.ensureInitialized();
+  }
+  VideoPlayerMediaKit.ensureInitialized(linux: true);
   RemoteControlService.instance.connect();
   loadConfig();
   runApp(const PigflixApp());
