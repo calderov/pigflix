@@ -226,6 +226,18 @@ flatpak run io.github.calderov.Pigflix
 flatpak uninstall io.github.calderov.Pigflix
 ```
 
+**Share it:** pass `--bundle` to also export a standalone `flatpak/pigflix.flatpak`
+file, installable on another machine with `flatpak install pigflix.flatpak`
+(no Flathub lookup needed, though the recipient still needs the
+`org.gnome.Platform//50` runtime, pulled automatically from Flathub on
+install if missing). `BACKEND_URL` is baked in at build time, so the bundle
+only works for whoever you built it for — pointed at your backend's LAN IP,
+it'll only work for people on that same LAN:
+
+```bash
+./flatpak/build.sh --bundle --dart-define=BACKEND_URL=http://<LAN-IP>:4000
+```
+
 ### Admin mode
 The lock button next to "refresh library" on the grid screen prompts for
 `ADMIN_PASSWORD` (set in `backend/.env`) and, once unlocked, reveals the "Fix
