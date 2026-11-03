@@ -3,7 +3,7 @@
 # from source — expect this to take a while) into a Flatpak and installs it
 # for the current user. Pass the same --dart-define=BACKEND_URL=... you'd
 # use for a plain Linux build, e.g.:
-#   ./flatpak/build.sh --dart-define=BACKEND_URL=http://192.168.1.50:4000
+#   ./flatpak/build.sh --dart-define=BACKEND_URL=http://127.0.0.1:4000
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
