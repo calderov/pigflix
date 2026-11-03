@@ -20,40 +20,15 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
-// Makes the window decoration (header bar/title bar) follow the desktop's
-// dark-mode preference, read via the XDG Desktop Portal Settings API
-// (org.freedesktop.appearance/color-scheme). Unlike reading GSettings
-// schemas directly, this works identically inside and outside a Flatpak
-// sandbox — a sandboxed app can't see the host's GSettings schemas, only
-// its own bundled ones, so a GSettings-based check would silently no-op
-// under Flatpak. Any failure (portal unavailable, call errors, unexpected
-// reply shape) leaves the theme unchanged, same as a missing schema did
-// before.
+// Pigflix's own UI is dark regardless of system theme, so the window
+// decoration (header bar/title bar) is forced dark too rather than
+// following the desktop's preference — matching it always looks better
+// than a light titlebar on a dark app, and sidesteps needing to detect the
+// system preference at all (previously done via GSettings, then the XDG
+// Desktop Portal Settings API — both fragile and no longer needed).
 static void apply_dark_theme_preference() {
-  g_autoptr(GError) error = nullptr;
-  g_autoptr(GDBusConnection) connection =
-      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
-  if (connection == nullptr) {
-    return;
-  }
-  g_autoptr(GVariant) result = g_dbus_connection_call_sync(
-      connection, "org.freedesktop.portal.Desktop",
-      "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings",
-      "ReadOne",
-      g_variant_new("(ss)", "org.freedesktop.appearance", "color-scheme"),
-      G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, -1, nullptr, &error);
-  if (result == nullptr) {
-    return;
-  }
-  g_autoptr(GVariant) value = nullptr;
-  g_variant_get(result, "(v)", &value);
-  if (value == nullptr || !g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32)) {
-    return;
-  }
-  // 0 = no preference, 1 = prefer dark, 2 = prefer light.
-  gboolean prefer_dark = g_variant_get_uint32(value) == 1;
   g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
-              prefer_dark, nullptr);
+              TRUE, nullptr);
 }
 
 // Sets the window icon (taskbar/alt-tab/dock) from the bundle's data/ dir,

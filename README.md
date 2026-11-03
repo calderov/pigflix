@@ -197,7 +197,13 @@ and icon for you, and `flatpak uninstall` removes them cleanly.
 ```bash
 sudo apt install flatpak-builder
 flatpak install flathub org.gnome.Platform//50 org.gnome.Sdk//50
+flatpak install flathub org.gtk.Gtk3theme.adw-gtk3-dark
 ```
+The last one is a GTK3 theme with a real dark variant — plain GTK3 apps
+don't follow the system dark-mode preference inside a Flatpak sandbox the
+way GTK4/libadwaita apps do, and the runtime's stock Adwaita theme has no
+dark variant of its own, so without it the window decoration stays light
+regardless of your system theme.
 
 **Build and install** (builds the Linux bundle above, then packages it —
 this also compiles `mpv`/`ffmpeg` from source, since Flatpak sandboxes can't

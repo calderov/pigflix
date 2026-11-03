@@ -12,6 +12,14 @@ finish-args:
   - --socket=fallback-x11
   - --socket=pulseaudio
   - --device=dri
+  # Plain GTK3 (unlike GTK4/libadwaita) doesn't follow the portal's
+  # color-scheme setting inside a sandbox, and the runtime's own stock
+  # Adwaita theme has no real dark variant — so forcing
+  # gtk-application-prefer-dark-theme from my_application.cc alone doesn't
+  # do anything here, even though it does outside Flatpak. adw-gtk3-dark is
+  # the standard GTK3 Flatpak theme extension with a real dark variant;
+  # requires `flatpak install flathub org.gtk.Gtk3theme.adw-gtk3-dark`.
+  - --env=GTK_THEME=adw-gtk3-dark
 
 modules:
   # libmpv has no shared Flathub runtime extension, so it (and ffmpeg, which
