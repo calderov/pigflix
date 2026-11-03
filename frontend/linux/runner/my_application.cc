@@ -43,12 +43,28 @@ static void apply_dark_theme_preference() {
               prefer_dark, nullptr);
 }
 
+// Sets the window icon (taskbar/alt-tab/dock) from the bundle's data/ dir,
+// located next to the running executable — not the source tree — so this
+// resolves correctly from an installed bundle, wherever it's copied to.
+static void set_window_icon(GtkWindow* window) {
+  g_autoptr(GError) error = nullptr;
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", &error);
+  if (exe_path == nullptr) {
+    return;
+  }
+  g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+  g_autofree gchar* icon_path =
+      g_build_filename(exe_dir, "data", "pigflix_icon.png", nullptr);
+  gtk_window_set_icon_from_file(window, icon_path, nullptr);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   apply_dark_theme_preference();
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+  set_window_icon(window);
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
