@@ -1,15 +1,42 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/movie.dart';
 
-/// Base URL of the pigflix backend. Override at build/run time with
-/// --dart-define=BACKEND_URL=http://your-server:4000 if it's not running
-/// on localhost:4000.
-const String backendUrl = String.fromEnvironment(
+/// Base URL of the pigflix backend, defaulting to the build-time
+/// --dart-define=BACKEND_URL=http://your-server:4000 (or localhost:4000 if
+/// that wasn't set). Mutable so the Linux desktop client's Settings dialog
+/// (see movie_grid_screen.dart) can override it at runtime.
+String backendUrl = const String.fromEnvironment(
   'BACKEND_URL',
   defaultValue: 'http://localhost:4000',
 );
+
+const _backendUrlPrefsKey = 'backend_url_override';
+
+/// Linux desktop client only — the Settings dialog is Linux-only, so these
+/// are no-ops everywhere else. Applies a previously [persistBackendUrl]d
+/// override to [backendUrl], if there is one. Call once at startup, before
+/// anything reads [backendUrl]/[backendWsUrl] for the first time.
+Future<void> loadPersistedBackendUrl() async {
+  if (kIsWeb || !Platform.isLinux) return;
+  final prefs = await SharedPreferences.getInstance();
+  final saved = prefs.getString(_backendUrlPrefsKey);
+  if (saved != null && saved.isNotEmpty) backendUrl = saved;
+}
+
+/// Saves a backend URL override so it survives app restarts — see
+/// [loadPersistedBackendUrl].
+Future<void> persistBackendUrl(String url) async {
+  if (kIsWeb || !Platform.isLinux) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_backendUrlPrefsKey, url);
+}
 
 /// The same backend, as a WebSocket URL (`http`→`ws`, `https`→`wss`), for
 /// [RemoteControlService]'s connection to the `/ws` relay endpoint.

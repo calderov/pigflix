@@ -13,3 +13,8 @@ tools/subtitle_sync_tool/in_progress/*
 tools/subtitle_sync_tool/done/*
 tools/subtitle_sync_tool/__pycache__
 tools/subtitle_sync_tool/.venv
+
+# flatpak/build-dir/ and .flatpak-builder/ self-ignore (flatpak-builder
+# drops its own .gitignore in each) — these two don't.
+flatpak/repo/
+flatpak/*.flatpak

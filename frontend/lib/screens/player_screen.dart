@@ -4,10 +4,10 @@ import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
-import 'package:web/web.dart' as web;
 
 import '../models/movie.dart';
 import '../services/api_service.dart';
+import '../services/fullscreen/fullscreen_control.dart' as fullscreen;
 import '../services/remote_control_service.dart';
 import '../services/srt_parser.dart';
 
@@ -36,6 +36,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final FocusNode _playerFocusNode = FocusNode(debugLabel: 'video player');
   StreamSubscription<Map<String, dynamic>>? _remoteSub;
   bool? _lastBroadcastIsPlaying;
+
+  // Whether fullscreen was already active (e.g. the user turned it on for
+  // the whole app) before this screen requested it — if so, `dispose`
+  // leaves it on instead of exiting, so fullscreen persists across screens.
+  bool _wasFullscreenBeforePlayer = false;
 
   @override
   void initState() {
@@ -152,9 +157,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     Navigator.of(context).pop();
   }
 
-  void _requestBrowserFullscreen() {
+  void _requestBrowserFullscreen() async {
     try {
-      web.document.documentElement?.requestFullscreen();
+      _wasFullscreenBeforePlayer = await fullscreen.isFullscreenActive();
+    } catch (_) {
+      // Default to false: if we can't tell, treat it as this screen's own
+      // fullscreen request, so dispose still cleans it up as before.
+    }
+    try {
+      fullscreen.requestFullscreen();
     } catch (_) {
       // Fullscreen requires a user gesture in some browsers; ignore if denied.
     }
@@ -162,11 +173,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _toggleFullscreen() {
     try {
-      if (web.document.fullscreenElement != null) {
-        web.document.exitFullscreen();
-      } else {
-        web.document.documentElement?.requestFullscreen();
-      }
+      fullscreen.toggleFullscreen();
     } catch (_) {
       // Fullscreen requires a user gesture in some browsers; ignore if denied.
     }
@@ -281,11 +288,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _remoteSub?.cancel();
     _statusPoll?.cancel();
     _hideBackButtonTimer?.cancel();
-    try {
-      if (web.document.fullscreenElement != null) {
-        web.document.exitFullscreen();
-      }
-    } catch (_) {}
+    if (!_wasFullscreenBeforePlayer) {
+      try {
+        fullscreen.exitFullscreenIfActive();
+      } catch (_) {}
+    }
     _videoController?.removeListener(_onVideoValueChanged);
     _chewieController?.dispose();
     _videoController?.dispose();

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Pigflix
+Comment=Self-hosted movie streaming client
+Exec=frontend
+Icon=io.github.calderov.Pigflix
+Terminal=false
+Categories=AudioVideo;Video;Player;
+StartupWMClass=io.github.calderov.Pigflix
