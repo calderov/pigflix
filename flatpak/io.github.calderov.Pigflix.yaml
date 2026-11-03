@@ -117,7 +117,7 @@ modules:
       - install -Dm755 pigflix-wrapper.sh /app/bin/frontend
       - install -Dm644 io.github.calderov.Pigflix.desktop /app/share/applications/io.github.calderov.Pigflix.desktop
       - install -Dm644 pigflix_icon.png /app/share/icons/hicolor/256x256/apps/io.github.calderov.Pigflix.png
-      - install -Dm644 icon.svg /app/share/icons/hicolor/scalable/apps/io.github.calderov.Pigflix.svg
+      - install -Dm644 pigflix_icon.svg /app/share/icons/hicolor/scalable/apps/io.github.calderov.Pigflix.svg
     sources:
       - type: dir
         path: ../frontend/build/linux/x64/release/bundle
@@ -129,4 +129,4 @@ modules:
       - type: file
         path: ../frontend/linux/assets/pigflix_icon.png
       - type: file
-        path: ../companion/assets/images/icon.svg
+        path: ../frontend/linux/assets/pigflix_icon.svg
