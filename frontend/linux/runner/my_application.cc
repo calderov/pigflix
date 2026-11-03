@@ -21,24 +21,37 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 }
 
 // Makes the window decoration (header bar/title bar) follow the desktop's
-// dark-mode preference, read from the freedesktop "color-scheme" setting
-// (org.gnome.desktop.interface), which GNOME/Pantheon/elementary/budgie etc.
-// expose but plain GTK3 doesn't poll on its own. No-op if that schema isn't
-// installed, so it stays harmless on window managers that don't have it.
+// dark-mode preference, read via the XDG Desktop Portal Settings API
+// (org.freedesktop.appearance/color-scheme). Unlike reading GSettings
+// schemas directly, this works identically inside and outside a Flatpak
+// sandbox — a sandboxed app can't see the host's GSettings schemas, only
+// its own bundled ones, so a GSettings-based check would silently no-op
+// under Flatpak. Any failure (portal unavailable, call errors, unexpected
+// reply shape) leaves the theme unchanged, same as a missing schema did
+// before.
 static void apply_dark_theme_preference() {
-  GSettingsSchemaSource* source = g_settings_schema_source_get_default();
-  if (source == nullptr) {
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GDBusConnection) connection =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+  if (connection == nullptr) {
     return;
   }
-  g_autoptr(GSettingsSchema) schema = g_settings_schema_source_lookup(
-      source, "org.gnome.desktop.interface", TRUE);
-  if (schema == nullptr) {
+  g_autoptr(GVariant) result = g_dbus_connection_call_sync(
+      connection, "org.freedesktop.portal.Desktop",
+      "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings",
+      "ReadOne",
+      g_variant_new("(ss)", "org.freedesktop.appearance", "color-scheme"),
+      G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, -1, nullptr, &error);
+  if (result == nullptr) {
     return;
   }
-  g_autoptr(GSettings) settings = g_settings_new("org.gnome.desktop.interface");
-  g_autofree gchar* color_scheme = g_settings_get_string(settings, "color-scheme");
-  gboolean prefer_dark = color_scheme != nullptr &&
-                         g_strcmp0(color_scheme, "prefer-dark") == 0;
+  g_autoptr(GVariant) value = nullptr;
+  g_variant_get(result, "(v)", &value);
+  if (value == nullptr || !g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32)) {
+    return;
+  }
+  // 0 = no preference, 1 = prefer dark, 2 = prefer light.
+  gboolean prefer_dark = g_variant_get_uint32(value) == 1;
   g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
               prefer_dark, nullptr);
 }

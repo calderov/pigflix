@@ -1,0 +1,124 @@
+app-id: io.github.calderov.Pigflix
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: frontend
+finish-args:
+  # Reach the Pigflix backend over the LAN (baked into the Flutter build via
+  # --dart-define=BACKEND_URL=...); Pigflix never touches local files, so no
+  # filesystem permissions are needed.
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+
+modules:
+  # libmpv has no shared Flathub runtime extension, so it (and ffmpeg, which
+  # it depends on) is built from source, same as e.g. Celluloid's real
+  # Flathub manifest. Trimmed down from Celluloid's build: Pigflix renders
+  # its own subtitle overlay (not mpv's) and the backend always serves
+  # pre-transcoded H.264/AAC mp4, so none of libass/rubberband/uchardet/
+  # mujs/libplacebo/libopenmpt are needed — just ffmpeg's standard LGPL
+  # decoders and libmpv itself.
+  - name: ffmpeg
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /share/ffmpeg/examples
+    config-opts:
+      - --enable-shared
+      - --disable-static
+      - --disable-programs
+      - --disable-doc
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+        sha256: 8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
+
+  - name: mpv
+    buildsystem: meson
+    config-opts:
+      - -Dlibmpv=true
+      - -Dcplayer=false
+      - -Dbuild-date=false
+      - -Dmanpage-build=disabled
+    cleanup:
+      - /bin
+      - /include
+      - /lib/pkgconfig
+      - /share/applications
+      - /share/bash-completion
+      - /share/doc
+      - /share/icons
+      - /share/man
+      - /share/zsh
+    sources:
+      - type: archive
+        url: https://github.com/mpv-player/mpv/archive/v0.41.0.tar.gz
+        sha256: ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209
+
+    modules:
+      # Not actually optional, despite not appearing as a meson feature flag
+      # in mpv's own meson.options — mpv 0.41's GPU video output path
+      # unconditionally requires it (confirmed by the build failing with
+      # "Dependency libplacebo not found" without this). Same source pin
+      # Celluloid's manifest uses.
+      - name: libplacebo
+        buildsystem: meson
+        cleanup:
+          - /include
+          - /lib/pkgconfig
+        sources:
+          - type: git
+            url: https://github.com/haasn/libplacebo.git
+            tag: v7.387.0
+            commit: 275f7dea27924cdd34ab2e6c20e448b6bc4fab65
+
+      # Also a hard requirement, not optional — mpv's meson.build needs it
+      # for its own OSD text rendering even though Pigflix never uses mpv's
+      # subtitle rendering (it draws its own overlay). Checksum independently
+      # verified by downloading and hashing the release tarball ourselves.
+      - name: libass
+        cleanup:
+          - /include
+          - /lib/*.la
+          - /lib/pkgconfig
+        config-opts:
+          - --disable-static
+        sources:
+          - type: archive
+            url: https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.xz
+            sha256: 2dca25c0e0c837ddf00b52011b3f82cac1e4ddd3ad018227806b0c2288864acc
+
+  # The Flutter bundle is built outside the sandbox (`flutter build linux
+  # --release`, same as the non-Flatpak local build) and just copied in
+  # here — building it inside the sandbox would need the whole Flutter SDK
+  # vendored in as its own module plus a build-time network exception, for
+  # no real benefit over the already-working local build step.
+  - name: pigflix
+    buildsystem: simple
+    build-commands:
+      # The bundle's executable depends on files next to it ($ORIGIN/lib
+      # rpath, and our own data/pigflix_icon.png lookup relative to the
+      # executable — see frontend/linux/runner/my_application.cc), so it's
+      # kept together as one unit rather than split across /app/bin,
+      # /app/lib, /app/share the usual Flatpak way.
+      - install -d /app/pigflix
+      - cp -r bundle/. /app/pigflix/
+      - install -Dm755 pigflix-wrapper.sh /app/bin/frontend
+      - install -Dm644 io.github.calderov.Pigflix.desktop /app/share/applications/io.github.calderov.Pigflix.desktop
+      - install -Dm644 pigflix_icon.png /app/share/icons/hicolor/256x256/apps/io.github.calderov.Pigflix.png
+      - install -Dm644 icon.svg /app/share/icons/hicolor/scalable/apps/io.github.calderov.Pigflix.svg
+    sources:
+      - type: dir
+        path: ../frontend/build/linux/x64/release/bundle
+        dest: bundle
+      - type: file
+        path: pigflix-wrapper.sh
+      - type: file
+        path: io.github.calderov.Pigflix.desktop
+      - type: file
+        path: ../frontend/linux/assets/pigflix_icon.png
+      - type: file
+        path: ../companion/assets/images/icon.svg

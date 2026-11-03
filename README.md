@@ -183,6 +183,43 @@ Fullscreen (`F11`, from any screen) toggles a real OS window fullscreen and
 persists as you navigate between screens, matching the web version's
 browser-fullscreen behavior.
 
+#### Flatpak package (optional)
+
+The plain Linux build above works fine, but on Wayland desktops (GNOME,
+Pantheon/elementary OS, etc.) its window won't show the Pigflix icon in
+alt-tab or the dock — those resolve a window's icon through an *installed*
+`.desktop` file, which a bare local build doesn't have. Packaging it as a
+Flatpak fixes this properly: `flatpak install` exports the `.desktop` file
+and icon for you, and `flatpak uninstall` removes them cleanly.
+
+**Extra prerequisites:**
+
+```bash
+sudo apt install flatpak-builder
+flatpak install flathub org.gnome.Platform//50 org.gnome.Sdk//50
+```
+
+**Build and install** (builds the Linux bundle above, then packages it —
+this also compiles `mpv`/`ffmpeg` from source, since Flatpak sandboxes can't
+see the host's `libmpv`, so expect it to take a while, roughly 20–50
+minutes depending on your machine):
+
+```bash
+./flatpak/build.sh --dart-define=BACKEND_URL=http://<LAN-IP>:4000
+```
+
+**Run:**
+
+```bash
+flatpak run io.github.calderov.Pigflix
+```
+
+**Remove:**
+
+```bash
+flatpak uninstall io.github.calderov.Pigflix
+```
+
 ### Admin mode
 The lock button next to "refresh library" on the grid screen prompts for
 `ADMIN_PASSWORD` (set in `backend/.env`) and, once unlocked, reveals the "Fix
