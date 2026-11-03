@@ -528,6 +528,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     if (url.isEmpty || url == backendUrl) return;
 
     backendUrl = url;
+    await persistBackendUrl(url);
     setState(() => _moviesFuture = _load());
   }
 

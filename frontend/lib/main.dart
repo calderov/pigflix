@@ -34,6 +34,9 @@ Future<void> main() async {
     await windowManager.ensureInitialized();
     HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
   }
+  // Must happen before RemoteControlService.connect()/loadConfig() below —
+  // both read backendUrl/backendWsUrl immediately.
+  await loadPersistedBackendUrl();
   VideoPlayerMediaKit.ensureInitialized(linux: true);
   RemoteControlService.instance.connect();
   loadConfig();
