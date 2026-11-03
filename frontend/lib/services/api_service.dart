@@ -3,10 +3,11 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../models/movie.dart';
 
-/// Base URL of the pigflix backend. Override at build/run time with
-/// --dart-define=BACKEND_URL=http://your-server:4000 if it's not running
-/// on localhost:4000.
-const String backendUrl = String.fromEnvironment(
+/// Base URL of the pigflix backend, defaulting to the build-time
+/// --dart-define=BACKEND_URL=http://your-server:4000 (or localhost:4000 if
+/// that wasn't set). Mutable so the Linux desktop client's Settings dialog
+/// (see movie_grid_screen.dart) can override it at runtime.
+String backendUrl = const String.fromEnvironment(
   'BACKEND_URL',
   defaultValue: 'http://localhost:4000',
 );

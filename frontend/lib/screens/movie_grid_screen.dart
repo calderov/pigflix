@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -485,6 +487,50 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     }
   }
 
+  // The backend URL override below only makes sense for the Linux desktop
+  // build — the web build's BACKEND_URL is baked into index.html at deploy
+  // time and the companion app has its own separate pairing flow.
+  bool get _isLinuxDesktop => !kIsWeb && Platform.isLinux;
+
+  Future<void> _openSettingsDialog() async {
+    final controller = TextEditingController(text: backendUrl);
+    final newUrl = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Settings'),
+        content: SizedBox(
+          width: 360,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(labelText: 'Backend URL'),
+            onSubmitted: (value) => Navigator.of(context).pop(value),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || newUrl == null) return;
+
+    var url = newUrl.trim();
+    if (url.endsWith('/')) url = url.substring(0, url.length - 1);
+    if (url.isEmpty || url == backendUrl) return;
+
+    backendUrl = url;
+    setState(() => _moviesFuture = _load());
+  }
+
   Future<void> _toggleAdmin() async {
     if (AdminSession.isAdmin.value) {
       AdminSession.isAdmin.value = false;
@@ -567,6 +613,14 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                             setState(() => _moviesFuture = _load()),
                       ),
                     ),
+                    if (_isLinuxDesktop)
+                      ExcludeFocusTraversal(
+                        child: IconButton(
+                          icon: const Icon(Icons.settings),
+                          tooltip: 'Settings',
+                          onPressed: _openSettingsDialog,
+                        ),
+                      ),
                   ],
                 ),
               ),
