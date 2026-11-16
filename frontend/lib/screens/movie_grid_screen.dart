@@ -12,6 +12,7 @@ import '../services/admin_session.dart';
 import '../services/api_service.dart';
 import '../services/remote_control_service.dart';
 import '../services/route_observer.dart';
+import '../widgets/cached_poster_image.dart';
 import '../widgets/poster_placeholder.dart';
 import 'movie_detail_screen.dart';
 
@@ -855,8 +856,8 @@ class _MovieTile extends StatelessWidget {
                   aspectRatio: 2 / 3,
                   child: movie.posterUrl == null
                       ? PosterPlaceholder(title: movie.title)
-                      : Image.network(
-                          movie.posterUrl!,
+                      : CachedPosterImage(
+                          url: movie.posterUrl!,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               PosterPlaceholder(title: movie.title),
