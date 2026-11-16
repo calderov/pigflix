@@ -10,6 +10,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../models/movie.dart';
 import '../services/admin_session.dart';
 import '../services/api_service.dart';
+import '../services/image_disk_cache.dart';
 import '../services/remote_control_service.dart';
 import '../services/route_observer.dart';
 import '../widgets/cached_poster_image.dart';
@@ -159,6 +160,23 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     // since nothing else re-broadcasts once loading finishes.
     _broadcastScreenState();
     return movies;
+  }
+
+  // Warms Flutter's in-memory decoded-image cache for a movie's backdrop
+  // as soon as its grid tile is built (same lazy timing GridView.builder
+  // already uses for posters) — a disk-cache hit alone still has to decode
+  // the JPEG and upload it to the GPU the first time it's shown in this
+  // process, which is otherwise visible as a brief delay opening the detail
+  // screen, since the backdrop (unlike the poster) is never rendered
+  // anywhere before that. No-op off-Linux: ImageDiskCache.cachedFilePath
+  // resolves to null there, same as everywhere else this cache is used.
+  void _prefetchBackdrop(Movie movie) {
+    final url = movie.backdropUrl;
+    if (url == null) return;
+    ImageDiskCache.cachedFilePath(url).then((path) {
+      if (path == null || !mounted) return;
+      precacheImage(FileImage(File(path)), context);
+    });
   }
 
   List<Movie> get _filtered {
@@ -742,12 +760,15 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                                   mainAxisSpacing: _gridMainAxisSpacing,
                                 ),
                             itemCount: movies.length,
-                            itemBuilder: (context, index) => _MovieTile(
-                              movie: movies[index],
-                              onTap: () => _openMovie(movies[index]),
-                              focused: _gridFocusNode.hasFocus &&
-                                  index == focusedIndex,
-                            ),
+                            itemBuilder: (context, index) {
+                              _prefetchBackdrop(movies[index]);
+                              return _MovieTile(
+                                movie: movies[index],
+                                onTap: () => _openMovie(movies[index]),
+                                focused: _gridFocusNode.hasFocus &&
+                                    index == focusedIndex,
+                              );
+                            },
                           );
                         },
                       ),
