@@ -170,11 +170,11 @@ flutter build linux --release --dart-define=BACKEND_URL=http://<LAN-IP>:4000
 **Run:**
 
 ```bash
-./build/linux/x64/release/bundle/frontend
+./build/linux/x64/release/bundle/pigflix
 ```
 
 The bundle (`build/linux/x64/release/bundle/`) is self-contained — copy the
-whole folder if you want to run it from somewhere else, but keep `frontend`,
+whole folder if you want to run it from somewhere else, but keep `pigflix`,
 `data/`, and `lib/` together. The *machine running it* needs the `libmpv2`
 runtime package installed (`sudo apt install libmpv2`) even if it wasn't the
 one that built it.

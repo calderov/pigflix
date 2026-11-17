@@ -2,7 +2,7 @@ app-id: io.github.calderov.Pigflix
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk
-command: frontend
+command: pigflix
 finish-args:
   # Reach the Pigflix backend over the LAN (baked into the Flutter build via
   # --dart-define=BACKEND_URL=...); Pigflix never touches local files, so no
@@ -114,7 +114,7 @@ modules:
       # /app/lib, /app/share the usual Flatpak way.
       - install -d /app/pigflix
       - cp -r bundle/. /app/pigflix/
-      - install -Dm755 pigflix-wrapper.sh /app/bin/frontend
+      - install -Dm755 pigflix-wrapper.sh /app/bin/pigflix
       - install -Dm644 io.github.calderov.Pigflix.desktop /app/share/applications/io.github.calderov.Pigflix.desktop
       - install -Dm644 pigflix_icon.png /app/share/icons/hicolor/256x256/apps/io.github.calderov.Pigflix.png
       - install -Dm644 pigflix_icon.svg /app/share/icons/hicolor/scalable/apps/io.github.calderov.Pigflix.svg
