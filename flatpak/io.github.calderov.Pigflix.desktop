@@ -2,7 +2,7 @@
 Type=Application
 Name=Pigflix
 Comment=Self-hosted movie streaming client
-Exec=frontend
+Exec=pigflix
 Icon=io.github.calderov.Pigflix
 Terminal=false
 Categories=AudioVideo;Video;Player;
