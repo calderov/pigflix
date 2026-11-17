@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import '../models/movie.dart';
 import '../services/admin_session.dart';
 import '../services/api_service.dart';
+import '../services/image_disk_cache.dart';
 import '../services/remote_control_service.dart';
 import '../services/route_observer.dart';
+import '../widgets/cached_poster_image.dart';
 import '../widgets/poster_placeholder.dart';
 import 'player_screen.dart';
 
@@ -25,6 +27,12 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
   final ApiService _api = ApiService();
   late Movie _movie = widget.movie;
   StreamSubscription<Map<String, dynamic>>? _remoteSub;
+
+  // Fix Match can replace the poster/backdrop file at an unchanged URL, so
+  // a URL-keyed CachedPosterImage wouldn't otherwise know to refetch after
+  // invalidation — bumped alongside ImageDiskCache.invalidate in
+  // _fixMatch() to force both image widgets to remount with fresh state.
+  int _posterCacheBuster = 0;
 
   @override
   void initState() {
@@ -112,7 +120,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
     );
     if (result == null || !mounted) return;
 
-    setState(() => _movie = result);
+    // Fix Match can replace a movie's poster/backdrop file without its URL
+    // changing (both are keyed by movie id, not by TMDb match) — drop the
+    // old cached copies so they're re-downloaded instead of staying stale.
+    final oldPosterUrl = _movie.posterUrl;
+    final oldBackdropUrl = _movie.backdropUrl;
+    setState(() {
+      _movie = result;
+      _posterCacheBuster++;
+    });
+    if (oldPosterUrl != null) ImageDiskCache.invalidate(oldPosterUrl);
+    if (oldBackdropUrl != null) ImageDiskCache.invalidate(oldBackdropUrl);
 
     final message = result.metadataStatus == 'ready'
         ? 'Matched to "${result.title}"${result.year != null ? ' (${result.year})' : ''}.'
@@ -130,8 +148,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
         aspectRatio: 2 / 3,
         child: _movie.posterUrl == null
             ? PosterPlaceholder(title: _movie.title)
-            : Image.network(
-                _movie.posterUrl!,
+            : CachedPosterImage(
+                key: ValueKey('${_movie.posterUrl}-$_posterCacheBuster'),
+                url: _movie.posterUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
                     PosterPlaceholder(title: _movie.title),
@@ -185,8 +204,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> with RouteAware {
                         sigmaX: 0,
                         sigmaY: 0,
                       ),
-                      child: Image.network(
-                        _movie.backdropUrl!,
+                      child: CachedPosterImage(
+                        key: ValueKey(
+                          '${_movie.backdropUrl}-$_posterCacheBuster',
+                        ),
+                        url: _movie.backdropUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
                             Container(color: Colors.black),

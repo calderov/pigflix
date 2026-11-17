@@ -10,8 +10,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../models/movie.dart';
 import '../services/admin_session.dart';
 import '../services/api_service.dart';
+import '../services/image_disk_cache.dart';
 import '../services/remote_control_service.dart';
 import '../services/route_observer.dart';
+import '../widgets/cached_poster_image.dart';
 import '../widgets/poster_placeholder.dart';
 import 'movie_detail_screen.dart';
 
@@ -91,6 +93,7 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
   void dispose() {
     routeObserver.unsubscribe(this);
     _remoteSub?.cancel();
+    _prefetchDebounce?.cancel();
     _gridFocusNode.removeListener(_onGridFocusChange);
     _gridFocusNode.dispose();
     _searchFocusNode.dispose();
@@ -160,6 +163,42 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
     return movies;
   }
 
+  // Warms Flutter's in-memory decoded-image cache for a movie's backdrop —
+  // a disk-cache hit alone still has to decode the JPEG and upload it to
+  // the GPU the first time it's shown in this process, which is otherwise
+  // visible as a brief delay opening the detail screen, since the backdrop
+  // (unlike the poster) is never rendered anywhere before that. No-op
+  // off-Linux: ImageDiskCache.cachedFilePath resolves to null there, same
+  // as everywhere else this cache is used.
+  void _prefetchBackdrop(Movie movie) {
+    final url = movie.backdropUrl;
+    if (url == null) return;
+    ImageDiskCache.cachedFilePath(url).then((path) {
+      if (path == null || !mounted) return;
+      precacheImage(FileImage(File(path)), context);
+    });
+  }
+
+  // Debounces the prefetch above to only the tile the user is actually
+  // lingering on (hovered with the mouse, or landed on via keyboard focus)
+  // rather than every tile GridView.builder happens to build while
+  // scrolling — without this, fast mouse movement across a row (or a
+  // held-down arrow key) would re-trigger it for every tile passed over,
+  // flooding Flutter's 100MB image cache with backdrops for movies that
+  // were never actually going to be opened and evicting ones that were.
+  // Passing null (e.g. on hover-exit) just cancels any pending prefetch
+  // without scheduling a new one.
+  Timer? _prefetchDebounce;
+
+  void _scheduleBackdropPrefetch(Movie? movie) {
+    _prefetchDebounce?.cancel();
+    if (movie == null) return;
+    _prefetchDebounce = Timer(
+      const Duration(milliseconds: 100),
+      () => _prefetchBackdrop(movie),
+    );
+  }
+
   List<Movie> get _filtered {
     Iterable<Movie> result = _allMovies;
     if (_query.isNotEmpty) {
@@ -220,6 +259,10 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
       _focusedTileIndex = newIndex;
     });
     _revealFocusedTile(newIndex);
+    final movies = _filtered;
+    if (movies.isNotEmpty) {
+      _scheduleBackdropPrefetch(movies[_clampFocusIndex(newIndex, movies.length)]);
+    }
   }
 
   /// Moves keyboard focus onto the grid and selects its first tile — used
@@ -741,12 +784,19 @@ class _MovieGridScreenState extends State<MovieGridScreen> with RouteAware {
                                   mainAxisSpacing: _gridMainAxisSpacing,
                                 ),
                             itemCount: movies.length,
-                            itemBuilder: (context, index) => _MovieTile(
-                              movie: movies[index],
-                              onTap: () => _openMovie(movies[index]),
-                              focused: _gridFocusNode.hasFocus &&
-                                  index == focusedIndex,
-                            ),
+                            itemBuilder: (context, index) {
+                              final movie = movies[index];
+                              return _MovieTile(
+                                movie: movie,
+                                onTap: () => _openMovie(movie),
+                                focused: _gridFocusNode.hasFocus &&
+                                    index == focusedIndex,
+                                onHoverChange: (hovering) =>
+                                    _scheduleBackdropPrefetch(
+                                      hovering ? movie : null,
+                                    ),
+                              );
+                            },
                           );
                         },
                       ),
@@ -819,17 +869,20 @@ class _MovieTile extends StatelessWidget {
   final Movie movie;
   final VoidCallback onTap;
   final bool focused;
+  final ValueChanged<bool>? onHoverChange;
 
   const _MovieTile({
     required this.movie,
     required this.onTap,
     this.focused = false,
+    this.onHoverChange,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      onHover: onHoverChange,
       // The whole grid is one keyboard-focusable region (see
       // MovieGridScreen's _gridFocusNode); arrow keys move `focused` between
       // tiles rather than each tile being its own Tab stop.
@@ -855,8 +908,8 @@ class _MovieTile extends StatelessWidget {
                   aspectRatio: 2 / 3,
                   child: movie.posterUrl == null
                       ? PosterPlaceholder(title: movie.title)
-                      : Image.network(
-                          movie.posterUrl!,
+                      : CachedPosterImage(
+                          url: movie.posterUrl!,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               PosterPlaceholder(title: movie.title),
