@@ -883,13 +883,14 @@ class _MovieTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onHover: onHoverChange,
+      hoverColor: Colors.blueGrey.withValues(alpha: 0.12),
       // The whole grid is one keyboard-focusable region (see
       // MovieGridScreen's _gridFocusNode); arrow keys move `focused` between
       // tiles rather than each tile being its own Tab stop.
       canRequestFocus: false,
       borderRadius: BorderRadius.circular(8),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: Container(
