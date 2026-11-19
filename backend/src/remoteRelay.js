@@ -1,5 +1,10 @@
 const crypto = require('crypto');
-const { PAIRING_CODE_TTL_MINUTES, PAIRING_CODE_LENGTH, SESSION_RESUME_TTL_MINUTES } = require('./config');
+const {
+  PAIRING_CODE_TTL_MINUTES,
+  PAIRING_CODE_LENGTH,
+  SESSION_RESUME_TTL_MINUTES,
+  WS_HEARTBEAT_INTERVAL_MS,
+} = require('./config');
 
 // All state here is in-memory and per-process: pairing codes and the
 // display/remote link are short-lived by nature (a single evening's remote
@@ -187,6 +192,15 @@ function handleRemoteMessage(ws, msg) {
 
 function attachRemoteRelay(wss) {
   wss.on('connection', (ws, req) => {
+    // Heartbeat state for the interval below — a connection that doesn't
+    // pong back within one interval is presumed dead and terminated, which
+    // fires its 'close' handler and releases displaySocket/remoteSocket so
+    // a real reconnect isn't stuck behind a ghost of the old one.
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
     const url = new URL(req.url, 'http://localhost');
     const role = url.searchParams.get('role');
 
@@ -228,6 +242,15 @@ function attachRemoteRelay(wss) {
       }
     });
   });
+
+  const heartbeat = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, WS_HEARTBEAT_INTERVAL_MS);
+  wss.on('close', () => clearInterval(heartbeat));
 }
 
 module.exports = { attachRemoteRelay };

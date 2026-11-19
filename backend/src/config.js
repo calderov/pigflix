@@ -39,4 +39,12 @@ module.exports = {
   // the pairing is torn down and a fresh pairing code is required. Default:
   // 10 minutes — long enough to survive a phone screen timeout mid-movie.
   SESSION_RESUME_TTL_MINUTES: parseInt(process.env.SESSION_RESUME_TTL_MINUTES, 10) || 180,
+  // How often the remote-relay websocket server pings each connection to
+  // detect ones that died without a clean close (sleep/wake, a dropped
+  // Wi-Fi link, a NAT mapping silently expiring) — plain TCP alone won't
+  // reliably surface those. Without this, a dead display connection can
+  // block every reconnect attempt (only one display is allowed at a time,
+  // see remoteRelay.js) until the OS eventually times out the dead socket
+  // on its own, which can take far longer than this.
+  WS_HEARTBEAT_INTERVAL_MS: parseInt(process.env.WS_HEARTBEAT_INTERVAL_MS, 10) || 30000,
 };
