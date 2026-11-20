@@ -1067,10 +1067,20 @@ class _RemotePairingDialog extends StatefulWidget {
 }
 
 class _RemotePairingDialogState extends State<_RemotePairingDialog> {
+  // A pairing-code request can go unanswered forever if the display's own
+  // websocket connection happens to be down at that moment (RemoteControl-
+  // Service._send silently no-ops on a null channel) — without this, the
+  // dialog would just sit on "Generating code…" with no indication
+  // anything's wrong. If no code has shown up after a few seconds, offer a
+  // manual retry instead of waiting indefinitely.
+  Timer? _timeoutTimer;
+  bool _timedOut = false;
+
   @override
   void initState() {
     super.initState();
     RemoteControlService.instance.isPaired.addListener(_onPairedChange);
+    RemoteControlService.instance.pairingCode.addListener(_onCodeChange);
     // Pairing can complete before this dialog's first frame renders (e.g.
     // frame scheduling briefly stalls, or the phone finishes pairing
     // unusually fast) — in which case isPaired flips true *before* the
@@ -1080,11 +1090,14 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
     // the already-true case once mounted, rather than only reacting to
     // future changes.
     WidgetsBinding.instance.addPostFrameCallback((_) => _onPairedChange());
+    _startTimeout();
   }
 
   @override
   void dispose() {
+    _timeoutTimer?.cancel();
     RemoteControlService.instance.isPaired.removeListener(_onPairedChange);
+    RemoteControlService.instance.pairingCode.removeListener(_onCodeChange);
     super.dispose();
   }
 
@@ -1092,6 +1105,29 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
     if (RemoteControlService.instance.isPaired.value && mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  void _onCodeChange() {
+    // A code showed up after all — drop any pending timeout so it doesn't
+    // flip _timedOut once it fires for a request that actually succeeded.
+    if (RemoteControlService.instance.pairingCode.value != null) {
+      _timeoutTimer?.cancel();
+    }
+  }
+
+  void _startTimeout() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && RemoteControlService.instance.pairingCode.value == null) {
+        setState(() => _timedOut = true);
+      }
+    });
+  }
+
+  void _retry() {
+    setState(() => _timedOut = false);
+    RemoteControlService.instance.requestPairingCode();
+    _startTimeout();
   }
 
   @override
@@ -1114,6 +1150,29 @@ class _RemotePairingDialogState extends State<_RemotePairingDialog> {
               valueListenable: RemoteControlService.instance.pairingCode,
               builder: (context, code, _) {
                 if (code == null) {
+                  if (_timedOut) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.redAccent,
+                          size: 32,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "Couldn't reach the backend to generate a "
+                          'pairing code.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: _retry,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    );
+                  }
                   return const Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
